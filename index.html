@@ -2,14 +2,15 @@
 <html lang="ru">
 <head>
     <meta charset="utf-8">
-    <title>PSO MapBY Dfly v2.0 — ONE-FILE ЧИСТАЯ КАРТА</title>
+    <title>PSO MapBY Dfly v2.5 — FINAL ONE-FILE ЧИСТАЯ КАРТА</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-    <link rel="stylesheet" href="https://unpkg.com/@geoman-io/leaflet-geoman-free@2.17.0/dist/leaflet-geoman-free.css" />
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css" />
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@geoman-io/leaflet-geoman-free@2.17.0/dist/leaflet-geoman-free.css" />
     <style>
-        html, body { height: 100%; margin: 0; padding: 0; font-family: Arial, sans-serif; overflow: hidden; }
+        html, body { height: 100%; margin: 0; padding: 0; font-family: Arial, sans-serif; overflow: hidden; background: #fff; }
         #map { position: absolute; top: 0; bottom: 0; left: 0; right: 0; width: 100vw; height: 100vh; background: #dddddd; z-index: 1; }
         #sidebar { position: absolute; top: 10px; left: 10px; width: 340px; max-height: 90vh; overflow-y: auto; background: rgba(255,255,255,0.95); padding: 15px; border-radius: 12px; box-shadow: 0 0 15px rgba(0,0,0,0.5); z-index: 1000; font-size: 14px; }
+        #debug { position: absolute; top: 10px; right: 10px; background: red; color: white; padding: 10px; border-radius: 8px; z-index: 2000; font-weight: bold; }
         button, input, select { margin: 5px 0; padding: 10px; width: 100%; border-radius: 8px; box-sizing: border-box; border: 1px solid #ccc; font-size: 14px; }
         button { cursor: pointer; font-weight: bold; }
         .primary { background:#4CAF50; color:white; }
@@ -26,8 +27,9 @@
 </head>
 <body>
 <div id="map"></div>
+<div id="debug">ДЕБАГ: СКРИПТ ЗАГРУЖЕН. ЕСЛИ КАРТЫ НЕТ — F12 → Console → пришли скрин ошибок!</div>
 <div id="sidebar">
-    <h2>PSO Координатор v2.0 — ONE-FILE</h2>
+    <h2>PSO Координатор v2.5 — FINAL</h2>
     <button onclick="clearAll()">Очистить всё</button>
     <button onclick="startDrawing()" class="primary">Нарисовать полигон поиска</button>
     <button onclick="saveProject()">Сохранить проект</button>
@@ -61,14 +63,22 @@
     <button onclick="exportKML()">Экспорт KML</button>
 </div>
 
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-<script src="https://unpkg.com/@turf/turf@6.5.0/turf.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@turf/turf@6.5.0/turf.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@turf/clusters-kmeans@6.5.0"></script>
-<script src="https://unpkg.com/@geoman-io/leaflet-geoman-free@2.17.0/dist/leaflet-geoman-free.min.js"></script>
-<script src="https://unpkg.com/leaflet-kml@1.0.1/L.KML.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@geoman-io/leaflet-geoman-free@2.17.0/dist/leaflet-geoman-free.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/leaflet-kml@1.0.1/L.KML.min.js"></script>
 
 <script>
+if (typeof L === 'undefined') {
+    alert('Leaflet НЕ ЗАГРУЗИЛСЯ — проверь интернет/CDN/adblock! Локально скачай файл и открой.');
+    console.error('Leaflet failed to load');
+} else {
+    console.log('Leaflet OK, version:', L.version);
+}
+
 document.addEventListener('DOMContentLoaded', () => {
+    console.log('DOM loaded — map init');
     const map = L.map('map', { 
         doubleClickZoom: false,
         attributionControl: false,
@@ -88,12 +98,11 @@ document.addEventListener('DOMContentLoaded', () => {
     L.control.layers({'OSM': osm, 'ESRI Satellite': esri, 'Google Satellite': googleSat}, {}, {position: 'topright', collapsed: true}).addTo(map);
 
     const forceResize = () => {
+        console.log('forceResize');
         setTimeout(() => map.invalidateSize({pan: true, animate: true}), 50);
     };
-    map.whenReady(forceResize);
-    setTimeout(forceResize, 100);
-    setTimeout(forceResize, 500);
-    setTimeout(forceResize, 1500);
+    map.whenReady(() => { console.log('Map ready'); forceResize(); });
+    [100, 300, 500, 800, 1200, 2000, 3000, 5000].forEach(t => setTimeout(forceResize, t));
     window.addEventListener('resize', forceResize);
     window.addEventListener('orientationchange', forceResize);
 
@@ -109,10 +118,12 @@ document.addEventListener('DOMContentLoaded', () => {
     function startDrawing() {
         clearAll();
         map.pm.enableDraw('Polygon', { finishOn: 'dblclick', pathOptions: { color: '#3388ff', weight: 4, fillOpacity: 0.2 } });
+        console.log('Drawing enabled');
     }
 
     map.on('pm:create', e => {
         if (e.shape === 'Polygon') {
+            console.log('Polygon created');
             map.pm.disableDraw();
             drawnItems.clearLayers();
             searchPolygon = e.layer;
@@ -163,7 +174,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     clipped.properties = {label, area};
                     const layer = L.geoJSON(clipped, {style: {color: '#3388ff', weight: 1, fillOpacity: 0.05}}).addTo(gridLayer);
                     const icon = L.divIcon({className: 'grid-label', html: label, iconSize: [30,30], iconAnchor: [15,15]});
-                    L.marker(center.geometry.coordinates.slice().reverse(), {icon}).addTo(gridLayer);
+                    neuen L.marker(center.geometry.coordinates.slice().reverse(), {icon}).addTo(gridLayer);
 
                     gridCells.push({geojson: clipped, layer, center: turf.point(center.geometry.coordinates), area});
                 }
@@ -198,7 +209,7 @@ document.addEventListener('DOMContentLoaded', () => {
     function updateGroupsTable() {
         const table = document.getElementById('groupsTable');
         table.innerHTML = '<tr><th>Позывной</th><th>Люди</th><th>Авто</th><th>БЛА</th><th>Площадь м²</th><th>Квадратов</th></tr>';
-        groups.forEach((g, i) => {
+        groups.forEach(g => {
             const row = table.insertRow();
             row.style.backgroundColor = g.color + '33';
             row.onclick = () => { if (g.cells.length) map.fitBounds(getGroupBounds(g)); };
@@ -256,7 +267,9 @@ document.addEventListener('DOMContentLoaded', () => {
             for (let j = 1; j < g.cells.length; j++) merged = turf.union(merged, g.cells[j].geojson);
             const center = turf.center(merged);
             L.geoJSON(merged, {style: {color: g.color, weight: 6, fillOpacity: 0, dashArray: '10,15', opacity: 0.9}}).addTo(zoneLayers);
-            L.marker(center.geometry.coordinates.slice().reverse(), {icon: L.divIcon({className: 'group-label', html: g.callsign, iconSize: [120,44], iconAnchor: [60,22]})}).addTo(zoneLayers);
+            L.marker(center.geometry.coordinates.slice().reverse(), {
+                icon: L.divIcon({className: 'group-label', html: g.callsign, iconSize: [120,44], iconAnchor: [60,22]})
+            }).addTo(zoneLayers);
         });
 
         updateGroupsTable();
@@ -304,7 +317,7 @@ document.addEventListener('DOMContentLoaded', () => {
     function saveProject() {
         const data = {searchFeature, gridCells: gridCells.map(c => c.geojson), groups};
         localStorage.setItem('psoProject', JSON.stringify(data));
-        alert('Сохранено!');
+        alert('Сохранено в браузере!');
     }
 
     function loadProject() {
@@ -312,8 +325,9 @@ document.addEventListener('DOMContentLoaded', () => {
         if (saved && confirm('Загрузить?')) {
             const data = JSON.parse(saved);
             clearAll();
+            searchFeature = data.searchFeature;
+            // Полное восстановление позже
             alert('Загружено базово — грид/зоны пересоздай');
-            console.log(data);
             forceResize();
         }
     }
@@ -325,6 +339,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     forceResize();
+    console.log('PSO MapBY Dfly v2.5 INIT COMPLETE');
 });
 </script>
 </body>
