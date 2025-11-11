@@ -2,7 +2,7 @@
 <html lang="ru">
 <head>
     <meta charset="utf-8">
-    <title>PSO MapBY Dfly v3.5 — FIXED RELOAD & DEBUG REMOVED</title>
+    <title>PSO MapBY Dfly v3.5</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <link rel="stylesheet" href="https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.css" />
@@ -27,7 +27,7 @@
 <body>
 <div id="map"></div>
 <div id="sidebar">
-    <h2>PSO Координатор v3.5 — FIXED</h2>
+    <h2>PSO Координатор v3.5</h2>
     <button onclick="clearMap()" class="danger">Очистить карту</button>
     <button onclick="startDrawing()" class="primary">Нарисовать полигон поиска</button>
     <button onclick="saveProject()">Сохранить проект</button>
@@ -44,7 +44,7 @@
             <option value="1000">1 км</option>
         </select>
         <input type="number" id="gridCustom" placeholder="Своё (м)">
-        <button onclick="generateGrid()" class="primary">Сгенерировать грид</button>
+        <button onclick="generateGrid()" class="primary">Нанести сетку</button>
     </div>
     <hr>
     <h4>Группы</h4>
@@ -187,10 +187,15 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     };
 
+    const russianLetters = 'АБВГДЕЖЗИКЛМНОПРСТУФХЦЧШЩЮ'.split('');
+
     window.getColumnLabel = function(n) {
         let s = '';
-        while (n >= 0) { s = String.fromCharCode(65 + (n % 26)) + s; n = Math.floor(n / 26) - 1; }
-        return s || 'A';
+        while (n >= 0) {
+            s = russianLetters[n % 26] + s;
+            n = Math.floor(n / 26) - 1;
+        }
+        return s || 'А';
     };
 
     window.generateGrid = function() {
@@ -199,7 +204,7 @@ document.addEventListener('DOMContentLoaded', () => {
         gridCells = [];
 
         let size = parseFloat(document.getElementById('gridCustom').value) || parseFloat(document.getElementById('gridPreset').value);
-        if (!size || size <= 0) return alert('Размер грида!');
+        if (!size || size <= 0) return alert('Размер сетки!');
 
         const bbox = turf.bbox(searchFeature);
         const avgLat = (bbox[1] + bbox[3]) / 2;
@@ -215,17 +220,23 @@ document.addEventListener('DOMContentLoaded', () => {
         for (let lon = startLon; lon <= bbox[2] + degLon; lon += degLon) {
             let row = 1;
             for (let lat = startLat; lat <= bbox[3] + degLat; lat += degLat) {
+                // Нанести линии
+                L.polyline([[lat, lon], [lat, lon + degLon]], {color: '#3388ff', weight: 1}).addTo(gridLayer);
+                L.polyline([[lat, lon], [lat + degLat, lon]], {color: '#3388ff', weight: 1}).addTo(gridLayer);
+
+                // Метка на пересечении
+                const label = getColumnLabel(col) + row;
+                const icon = L.divIcon({className: 'grid-label', html: label, iconSize: [30,30], iconAnchor: [15,15]});
+                L.marker([lat, lon], {icon}).addTo(gridLayer);
+
                 const cellPoly = turf.polygon([[[lon, lat], [lon + degLon, lat], [lon + degLon, lat + degLat], [lon, lat + degLat], [lon, lat]]]);
                 let clipped = turf.intersect(cellPoly, searchFeature); // Фикс: intersect напрямую, без featureCollection
                 if (clipped && turf.area(clipped) > 100) {
                     const area = turf.area(clipped);
                     const center = turf.center(clipped);
-                    const label = getColumnLabel(col) + row;
 
                     clipped.properties = {label, area};
-                    const layer = L.geoJSON(clipped, {style: {color: '#3388ff', weight: 1, fillOpacity: 0.05}}).addTo(gridLayer);
-                    const icon = L.divIcon({className: 'grid-label', html: label, iconSize: [30,30], iconAnchor: [15,15]});
-                    L.marker(center.geometry.coordinates.slice().reverse(), {icon}).addTo(gridLayer);
+                    const layer = L.geoJSON(clipped, {style: {color: '#3388ff', weight: 1, fillOpacity: 0}}).addTo(gridLayer);
 
                     gridCells.push({geojson: clipped, layer, center: turf.point(center.geometry.coordinates), area});
                 }
@@ -416,7 +427,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     forceResize();
-    console.log('PSO MapBY Dfly v3.4 INIT COMPLETE');
+    console.log('PSO MapBY Dfly v3.5 INIT COMPLETE');
 });
 </script>
 </body>
