@@ -2,7 +2,7 @@
 <html lang="ru">
 <head>
     <meta charset="utf-8">
-    <title>PSO MapBY Dfly v3.5 — FIXED RELOAD & DEBUG REMOVED</title>
+    <title>PSO MapBY Dfly v4.0 — UPDATED WITH BUFFER & RUS LABELS</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <link rel="stylesheet" href="https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.css" />
@@ -27,7 +27,7 @@
 <body>
 <div id="map"></div>
 <div id="sidebar">
-    <h2>PSO Координатор v3.5 — FIXED</h2>
+    <h2>PSO Координатор v4.0 — FIXED</h2>
     <button onclick="clearMap()" class="danger">Очистить карту</button>
     <button onclick="startDrawing()" class="primary">Нарисовать полигон поиска</button>
     <button onclick="saveProject()" class="primary">Сохранить план поиска</button>
@@ -107,7 +107,14 @@ document.addEventListener('DOMContentLoaded', () => {
         setTimeout(() => map.invalidateSize({pan: true, animate: true}), 50);
     };
     map.whenReady(() => { console.log('Map ready'); forceResize(); });
-    [100, 300, 500, 800, 1200, 2000, 3000, 5000].forEach(t => setTimeout(forceResize, t));
+    setTimeout(forceResize, 100);
+    setTimeout(forceResize, 300);
+    setTimeout(forceResize, 500);
+    setTimeout(forceResize, 800);
+    setTimeout(forceResize, 1200);
+    setTimeout(forceResize, 2000);
+    setTimeout(forceResize, 3000);
+    setTimeout(forceResize, 5000);
     window.addEventListener('resize', forceResize);
     window.addEventListener('orientationchange', forceResize);
 
@@ -437,7 +444,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     forceResize();
-    console.log('PSO MapBY Dfly v3.5 INIT COMPLETE');
+    console.log('PSO MapBY Dfly v4.0 INIT COMPLETE');
 });
 </script>
 </body>
