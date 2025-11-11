@@ -57,8 +57,12 @@
     <label><input type="checkbox" id="hasBla"> БЛА (приоритет)</label>
     <button onclick="addGroup()" class="accent">Добавить группу</button>
     <button onclick="assignZones()" class="danger">Распределить зоны</button>
-    <button onclick="generateRoutes()" class="accent">Генерировать маршруты</button>
     <table id="groupsTable"><tr><th>Позывной</th><th>Люди</th><th>Авто</th><th>БЛА</th><th>Площадь м²</th><th>Квадратов</th></tr></table>
+    <hr>
+    <h4>Маршруты</h4>
+    <input type="number" id="stepPesh" placeholder="Шаг пеших (м)" value="10">
+    <input type="number" id="stepBla" placeholder="Шаг БЛА (м)" value="50">
+    <button onclick="generateRoutes()" class="accent">Генерировать маршруты</button>
     <hr>
     <button onclick="exportGeoJSON()">Экспорт GeoJSON</button>
     <button onclick="exportKML()">Экспорт KML</button>
@@ -117,7 +121,7 @@ document.addEventListener('DOMContentLoaded', () => {
     let searchFeature = null;
     let gridLayer = L.layerGroup().addTo(map);
     let zoneLayers = L.layerGroup().addTo(map);
-    let routeLayers = L.layerGroup().addTo(map); // Новый слой для маршрутов
+    let routeLayers = L.layerGroup().addTo(map); // Для маршрутов
     let gridCells = [];
     let groups = [];
     const colors = ['#e41a1c','#377eb8','#4daf4a','#984ea3','#ff7f00','#ffff33','#a65628','#f781bf','#999999','#66c2a5'];
@@ -304,23 +308,26 @@ document.addEventListener('DOMContentLoaded', () => {
 
     window.generateRoutes = function() {
         routeLayers.clearLayers();
-        groups.forEach(g => {
-            if (g.cells.length === 0 || g.bla || g.cars > 0) return; // Только пешие (без БЛА/авто)
+        const stepPesh = parseFloat(document.getElementById('stepPesh').value) || 10;
+        const stepBla = parseFloat(document.getElementById('stepBla').value) || 50;
+        const blaSpeed = 10; // m/s
+        const blaTimeMax = 25 * 60; // 25 min in sec
 
+        groups.forEach(g => {
+            if (g.cells.length === 0) return;
             let merged = g.cells[0].geojson;
             for (let j = 1; j < g.cells.length; j++) merged = turf.union(merged, g.cells[j].geojson);
 
             const bbox = turf.bbox(merged);
             const avgLat = (bbox[1] + bbox[3]) / 2;
-            const stepMeters = 10; // Шаг змейки 10 м
             const metersPerDegLat = 111132.92 - 559.82 * Math.cos(2 * avgLat * Math.PI/180) + 1.175 * Math.cos(4 * avgLat * Math.PI/180);
-            const stepDeg = stepMeters / metersPerDegLat;
+            const stepDeg = (g.bla ? stepBla : stepPesh) / metersPerDegLat;
 
             let paths = [];
             let direction = 1; // 1 left to right, -1 right to left
             for (let lat = bbox[1]; lat <= bbox[3]; lat += stepDeg) {
                 let line = turf.lineString([[bbox[0], lat], [bbox[2], lat]]);
-                let clipped = turf.lineIntersect(line, merged); // Клиппинг линии по полигону
+                let clipped = turf.lineIntersect(line, merged); // Клиппинг
                 if (clipped.features.length > 0) {
                     let coords = clipped.features[0].geometry.coordinates;
                     if (direction === -1) coords = coords.reverse();
@@ -335,8 +342,14 @@ document.addEventListener('DOMContentLoaded', () => {
                 fullPath = fullPath.concat(paths[i]);
             }
 
+            const length = turf.length(turf.lineString(fullPath), {units: 'meters'});
+            if (g.bla && length / blaSpeed > blaTimeMax) {
+                console.log('BLA route too long for battery', g.callsign);
+                return; // Or split path
+            }
+
             L.polyline(fullPath.map(c => [c[1], c[0]]), {color: g.color, weight: 3, dashArray: '5, 5'}).addTo(routeLayers);
-            console.log('Zig-zag route added for group', g.callsign);
+            console.log('Route added for group', g.callsign, 'length:', length, 'm');
         });
         forceResize();
     };
