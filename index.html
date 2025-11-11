@@ -2,7 +2,7 @@
 <html lang="ru">
 <head>
     <meta charset="utf-8">
-    <title>PSO MapBY Dfly v2.5 — FINAL ONE-FILE ЧИСТАЯ КАРТА</title>
+    <title>PSO MapBY Dfly v3.0 — FIXED CDN & FULL TURF</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css" />
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@geoman-io/leaflet-geoman-free@2.17.0/dist/leaflet-geoman-free.css" />
@@ -29,7 +29,7 @@
 <div id="map"></div>
 <div id="debug">ДЕБАГ: СКРИПТ ЗАГРУЖЕН. ЕСЛИ КАРТЫ НЕТ — F12 → Console → пришли скрин ошибок!</div>
 <div id="sidebar">
-    <h2>PSO Координатор v2.5 — FINAL</h2>
+    <h2>PSO Координатор v3.0 — FIXED</h2>
     <button onclick="clearAll()">Очистить всё</button>
     <button onclick="startDrawing()" class="primary">Нарисовать полигон поиска</button>
     <button onclick="saveProject()">Сохранить проект</button>
@@ -65,8 +65,7 @@
 
 <script src="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@turf/turf@6.5.0/turf.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/@turf/clusters-kmeans@6.5.0"></script>
-<script src="https://cdn.jsdelivr.net/npm/@geoman-io/leaflet-geoman-free@2.17.0/dist/leaflet-geoman-free.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@geoman-io/leaflet-geoman-free@2.17.0/dist/leaflet-geoman-free.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/leaflet-kml@1.0.1/L.KML.min.js"></script>
 
 <script>
@@ -115,11 +114,11 @@ document.addEventListener('DOMContentLoaded', () => {
     let groups = [];
     const colors = ['#e41a1c','#377eb8','#4daf4a','#984ea3','#ff7f00','#ffff33','#a65628','#f781bf','#999999','#66c2a5'];
 
-    function startDrawing() {
+    window.startDrawing = function() {
         clearAll();
         map.pm.enableDraw('Polygon', { finishOn: 'dblclick', pathOptions: { color: '#3388ff', weight: 4, fillOpacity: 0.2 } });
         console.log('Drawing enabled');
-    }
+    };
 
     map.on('pm:create', e => {
         if (e.shape === 'Polygon') {
@@ -135,13 +134,13 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
-    function getColumnLabel(n) {
+    window.getColumnLabel = function(n) {
         let s = '';
         while (n >= 0) { s = String.fromCharCode(65 + (n % 26)) + s; n = Math.floor(n / 26) - 1; }
         return s || 'A';
-    }
+    };
 
-    function generateGrid() {
+    window.generateGrid = function() {
         if (!searchFeature) return alert('Нарисуй полигон!');
         gridLayer.clearLayers();
         gridCells = [];
@@ -174,7 +173,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     clipped.properties = {label, area};
                     const layer = L.geoJSON(clipped, {style: {color: '#3388ff', weight: 1, fillOpacity: 0.05}}).addTo(gridLayer);
                     const icon = L.divIcon({className: 'grid-label', html: label, iconSize: [30,30], iconAnchor: [15,15]});
-                    neuen L.marker(center.geometry.coordinates.slice().reverse(), {icon}).addTo(gridLayer);
+                    L.marker(center.geometry.coordinates.slice().reverse(), {icon}).addTo(gridLayer);
 
                     gridCells.push({geojson: clipped, layer, center: turf.point(center.geometry.coordinates), area});
                 }
@@ -183,9 +182,9 @@ document.addEventListener('DOMContentLoaded', () => {
             col++;
         }
         forceResize();
-    }
+    };
 
-    function addGroup() {
+    window.addGroup = function() {
         const base = document.getElementById('baseCall').value.trim() || 'Group';
         let maxNum = 0;
         groups.forEach(g => {
@@ -204,9 +203,9 @@ document.addEventListener('DOMContentLoaded', () => {
         groups.push({callsign, people, cars, bla, color: colors[groups.length % colors.length], cells: [], area: 0});
         updateGroupsTable();
         document.getElementById('startNum').value = '';
-    }
+    };
 
-    function updateGroupsTable() {
+    window.updateGroupsTable = function() {
         const table = document.getElementById('groupsTable');
         table.innerHTML = '<tr><th>Позывной</th><th>Люди</th><th>Авто</th><th>БЛА</th><th>Площадь м²</th><th>Квадратов</th></tr>';
         groups.forEach(g => {
@@ -220,16 +219,16 @@ document.addEventListener('DOMContentLoaded', () => {
             row.insertCell().innerText = Math.round(g.area);
             row.insertCell().innerText = g.cells.length;
         });
-    }
+    };
 
-    function getGroupBounds(g) {
+    window.getGroupBounds = function(g) {
         if (g.cells.length === 0) return map.getBounds();
         let merged = g.cells[0].geojson;
         for (let j = 1; j < g.cells.length; j++) merged = turf.union(merged, g.cells[j].geojson);
         return L.geoJSON(merged).getBounds();
-    }
+    };
 
-    function assignZones() {
+    window.assignZones = function() {
         if (gridCells.length === 0) return alert('Грид!');
         if (groups.length === 0) return alert('Группы!');
         zoneLayers.clearLayers();
@@ -274,9 +273,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
         updateGroupsTable();
         forceResize();
-    }
+    };
 
-    function exportGeoJSON() {
+    window.exportGeoJSON = function() {
         const data = {type: "FeatureCollection", features: [searchFeature, ...gridCells.map(c => c.geojson), ...groups.map(g => {
             if (g.cells.length === 0) return null;
             let merged = g.cells[0].geojson;
@@ -287,9 +286,9 @@ document.addEventListener('DOMContentLoaded', () => {
         const blob = new Blob([JSON.stringify(data)], {type: 'application/json'});
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a'); a.href = url; a.download = 'pso_plan.geojson'; a.click();
-    }
+    };
 
-    function exportKML() {
+    window.exportKML = function() {
         const kml = new L.KML();
         drawnItems.eachLayer(l => kml.addLayer(l));
         gridLayer.eachLayer(l => kml.addLayer(l));
@@ -297,9 +296,9 @@ document.addEventListener('DOMContentLoaded', () => {
         const blob = new Blob([kml.getKML()], {type: 'application/vnd.google-earth.kml+xml'});
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a'); a.href = url; a.download = 'pso_plan.kml'; a.click();
-    }
+    };
 
-    function clearAll() {
+    window.clearAll = function() {
         if (confirm('Очистить?')) {
             drawnItems.clearLayers();
             gridLayer.clearLayers();
@@ -312,25 +311,24 @@ document.addEventListener('DOMContentLoaded', () => {
             localStorage.removeItem('psoProject');
             forceResize();
         }
-    }
+    };
 
-    function saveProject() {
+    window.saveProject = function() {
         const data = {searchFeature, gridCells: gridCells.map(c => c.geojson), groups};
         localStorage.setItem('psoProject', JSON.stringify(data));
-        alert('Сохранено в браузере!');
-    }
+        alert('Сохранено!');
+    };
 
-    function loadProject() {
+    window.loadProject = function() {
         const saved = localStorage.getItem('psoProject');
         if (saved && confirm('Загрузить?')) {
             const data = JSON.parse(saved);
             clearAll();
             searchFeature = data.searchFeature;
-            // Полное восстановление позже
             alert('Загружено базово — грид/зоны пересоздай');
             forceResize();
         }
-    }
+    };
 
     if (window.Telegram?.WebApp) {
         window.Telegram.WebApp.ready();
@@ -339,7 +337,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     forceResize();
-    console.log('PSO MapBY Dfly v2.5 INIT COMPLETE');
+    console.log('PSO MapBY Dfly v3.0 INIT COMPLETE');
 });
 </script>
 </body>
