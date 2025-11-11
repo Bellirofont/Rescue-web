@@ -2,7 +2,7 @@
 <html lang="ru">
 <head>
     <meta charset="utf-8">
-    <title>PSO MapBY Dfly v3.5</title>
+    <title>PSO MapBY Dfly v4.0 — UPDATED WITH BUFFER & RUS LABELS</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <link rel="stylesheet" href="https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.css" />
@@ -27,7 +27,7 @@
 <body>
 <div id="map"></div>
 <div id="sidebar">
-    <h2>PSO Координатор v3.5</h2>
+    <h2>PSO Координатор v4.0 — FIXED</h2>
     <button onclick="clearMap()" class="danger">Очистить карту</button>
     <button onclick="startDrawing()" class="primary">Нарисовать полигон поиска</button>
     <button onclick="saveProject()">Сохранить проект</button>
@@ -52,7 +52,7 @@
     <input type="number" id="startNum" placeholder="Стартовый № (пусто=авто)">
     <input type="number" id="people" placeholder="Людей" value="5">
     <input type="number" id="cars" placeholder="Авто" value="0">
-    <label><input type="checkbox" id="hasBla"> БЛА (приоритет)</label>
+    <input type="number" id="blaNum" placeholder="БЛА (количество)" value="0">
     <button onclick="addGroup()" class="accent">Добавить группу</button>
     <button onclick="assignZones()" class="danger">Распределить зоны</button>
     <table id="groupsTable"><tr><th>Позывной</th><th>Люди</th><th>Авто</th><th>БЛА</th><th>Площадь м²</th><th>Квадратов</th></tr></table>
@@ -192,8 +192,8 @@ document.addEventListener('DOMContentLoaded', () => {
     window.getColumnLabel = function(n) {
         let s = '';
         while (n >= 0) {
-            s = russianLetters[n % 26] + s;
-            n = Math.floor(n / 26) - 1;
+            s = russianLetters[n % russianLetters.length] + s;
+            n = Math.floor(n / russianLetters.length) - 1;
         }
         return s || 'А';
     };
@@ -206,7 +206,10 @@ document.addEventListener('DOMContentLoaded', () => {
         let size = parseFloat(document.getElementById('gridCustom').value) || parseFloat(document.getElementById('gridPreset').value);
         if (!size || size <= 0) return alert('Размер сетки!');
 
-        const bbox = turf.bbox(searchFeature);
+        // Буфер 1 км
+        const buffered = turf.buffer(searchFeature, 1, {units: 'kilometers'});
+
+        const bbox = turf.bbox(buffered);
         const avgLat = (bbox[1] + bbox[3]) / 2;
         const metersPerDegLat = 111132.92 - 559.82 * Math.cos(2 * avgLat * Math.PI/180) + 1.175 * Math.cos(4 * avgLat * Math.PI/180);
         const metersPerDegLon = 111412.84 * Math.cos(avgLat * Math.PI/180) - 93.5 * Math.cos(3 * avgLat * Math.PI/180);
@@ -236,7 +239,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     const center = turf.center(clipped);
 
                     clipped.properties = {label, area};
-                    const layer = L.geoJSON(clipped, {style: {color: '#3388ff', weight: 1, fillOpacity: 0}}).addTo(gridLayer);
+                    const layer = L.geoJSON(clipped, {style: {color: '#3388ff', weight: 1, fillOpacity: 0.05}}).addTo(gridLayer);
 
                     gridCells.push({geojson: clipped, layer, center: turf.point(center.geometry.coordinates), area});
                 }
@@ -261,7 +264,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const callsign = `${base}-${num.toString().padStart(2,'0')}`;
         const people = parseInt(document.getElementById('people').value) || 0;
         const cars = parseInt(document.getElementById('cars').value) || 0;
-        const bla = document.getElementById('hasBla').checked;
+        const bla = parseInt(document.getElementById('blaNum').value) || 0;
 
         groups.push({callsign, people, cars, bla, color: colors[groups.length % colors.length], cells: [], area: 0});
         updateGroupsTable();
@@ -278,7 +281,7 @@ document.addEventListener('DOMContentLoaded', () => {
             row.insertCell().innerText = g.callsign;
             row.insertCell().innerText = g.people;
             row.insertCell().innerText = g.cars;
-            row.insertCell().innerText = g.bla ? 'Да' : 'Нет';
+            row.insertCell().innerText = g.bla;
             row.insertCell().innerText = Math.round(g.area);
             row.insertCell().innerText = g.cells.length;
         });
@@ -299,7 +302,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         // Простое распределение по площади (без k-means)
         gridCells.sort((a, b) => b.area - a.area);
-        groups.sort((a, b) => (b.bla ? 1e6 : 0) + b.people * 100 + b.cars - ((a.bla ? 1e6 : 0) + a.people * 100 + a.cars));
+        groups.sort((a, b) => (a.bla * a.bla + a.people * 100 + a.cars) - (b.bla * b.bla + b.people * 100 + b.cars)); // Учитывать количество БЛА (bla^2 for priority)
 
         let groupIndex = 0;
         for (let cell of gridCells) {
