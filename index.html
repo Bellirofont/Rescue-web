@@ -2,7 +2,7 @@
 <html lang="ru">
 <head>
     <meta charset="utf-8">
-    <title>PSO MapBY Dfly v3.3 — FIXED DRAW & ROUTES OPTIMIZED</title>
+    <title>PSO MapBY Dfly v3.4 — FIXED GRID & DRAW</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <link rel="stylesheet" href="https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.css" />
@@ -29,7 +29,7 @@
 <div id="map"></div>
 <div id="debug">ДЕБАГ: СКРИПТ ЗАГРУЖЕН. DRAW FIX. F12 Console для логов.</div>
 <div id="sidebar">
-    <h2>PSO Координатор v3.3 — FIXED</h2>
+    <h2>PSO Координатор v3.4 — FIXED</h2>
     <button onclick="clearMap()" class="danger">Очистить карту</button>
     <button onclick="startDrawing()" class="primary">Нарисовать полигон поиска</button>
     <button onclick="saveProject()">Сохранить проект</button>
@@ -218,9 +218,8 @@ document.addEventListener('DOMContentLoaded', () => {
             let row = 1;
             for (let lat = startLat; lat <= bbox[3] + degLat; lat += degLat) {
                 const cellPoly = turf.polygon([[[lon, lat], [lon + degLon, lat], [lon + degLon, lat + degLat], [lon, lat + degLat], [lon, lat]]]);
-                let clipped = turf.intersect(turf.featureCollection([cellPoly, searchFeature]));
-                if (clipped && clipped.features && clipped.features[0] && turf.area(clipped.features[0]) > 100) {
-                    clipped = clipped.features[0];
+                let clipped = turf.intersect(cellPoly, searchFeature); // Фикс: intersect напрямую, без featureCollection
+                if (clipped && turf.area(clipped) > 100) {
                     const area = turf.area(clipped);
                     const center = turf.center(clipped);
                     const label = getColumnLabel(col) + row;
@@ -420,6 +419,432 @@ document.addEventListener('DOMContentLoaded', () => {
 
     forceResize();
     console.log('PSO MapBY Dfly v3.3 INIT COMPLETE');
+});
+</script>
+</body>
+</html>
+```<|control12|>```html
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="utf-8">
+    <title>PSO MapBY Dfly v3.4 — FIXED GRID & DRAW</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <link rel="stylesheet" href="https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.css" />
+    <style>
+        html, body { height: 100%; margin: 0; padding: 0; font-family: Arial, sans-serif; overflow: hidden; background: #fff; }
+        #map { position: absolute; top: 0; bottom: 0; left: 0; right: 0; width: 100vw; height: 100vh; background: #dddddd; z-index: 1; }
+        #sidebar { position: absolute; top: 10px; left: 10px; width: 340px; max-height: 90vh; overflow-y: auto; background: rgba(255,255,255,0.95); padding: 15px; border-radius: 12px; box-shadow: 0 0 15px rgba(0,0,0,0.5); z-index: 1000; font-size: 14px; }
+        #debug { position: absolute; top: 10px; right: 10px; background: green; color: white; padding: 10px; border-radius: 8px; z-index: 2000; font-weight: bold; }
+        button, input, select { margin: 5px 0; padding: 10px; width: 100%; border-radius: 8px; box-sizing: border-box; border: 1px solid #ccc; font-size: 14px; }
+        button { cursor: pointer; font-weight: bold; }
+        .primary { background:#4CAF50; color:white; }
+        .accent { background:#FF9800; color:white; }
+        .danger { background:#f44336; color:white; }
+        table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 13px; }
+        th, td { border: 1px solid #999; padding: 8px; text-align: center; }
+        th { background: #f0f0f0; }
+        .grid-label { background: transparent; border: none; color: #000; font-weight: bold; font-size: 12px; text-shadow: 1px 1px 3px white; }
+        .group-label { background: rgba(255,255,255,0.9); padding: 4px 10px; border-radius: 6px; font-weight: bold; box-shadow: 0 0 8px rgba(0,0,0,0.3); }
+        tr { cursor: pointer; transition: background 0.2s; }
+        tr:hover { filter: brightness(0.95); }
+    </style>
+</head>
+<body>
+<div id="map"></div>
+<div id="debug">ДЕБАГ: СКРИПТ ЗАГРУЖЕН. DRAW FIX. F12 Console для логов.</div>
+<div id="sidebar">
+    <h2>PSO Координатор v3.4 — FIXED</h2>
+    <button onclick="clearMap()" class="danger">Очистить карту</button>
+    <button onclick="startDrawing()" class="primary">Нарисовать полигон поиска</button>
+    <button onclick="saveProject()">Сохранить проект</button>
+    <button onclick="loadProject()">Загрузить проект</button>
+    <hr>
+    <div id="gridControls" style="display:none;">
+        <h4>Грид</h4>
+        <select id="gridPreset">
+            <option value="100">100 м</option>
+            <option value="150">150 м</option>
+            <option value="200" selected>200 м</option>
+            <option value="250">250 м</option>
+            <option value="500">500 м</option>
+            <option value="1000">1 км</option>
+        </select>
+        <input type="number" id="gridCustom" placeholder="Своё (м)">
+        <button onclick="generateGrid()" class="primary">Сгенерировать грид</button>
+    </div>
+    <hr>
+    <h4>Группы</h4>
+    <input id="baseCall" placeholder="База (Трест)" value="Трест">
+    <input type="number" id="startNum" placeholder="Стартовый № (пусто=авто)">
+    <input type="number" id="people" placeholder="Людей" value="5">
+    <input type="number" id="cars" placeholder="Авто" value="0">
+    <label><input type="checkbox" id="hasBla"> БЛА (приоритет)</label>
+    <button onclick="addGroup()" class="accent">Добавить группу</button>
+    <button onclick="assignZones()" class="danger">Распределить зоны</button>
+    <table id="groupsTable"><tr><th>Позывной</th><th>Люди</th><th>Авто</th><th>БЛА</th><th>Площадь м²</th><th>Квадратов</th></tr></table>
+    <hr>
+    <h4>Маршруты</h4>
+    <input type="number" id="stepPesh" placeholder="Шаг пеших (м)" value="10">
+    <input type="number" id="stepBla" placeholder="Шаг БЛА (м)" value="50">
+    <button onclick="generateRoutes()" class="accent">Генерировать маршруты</button>
+    <hr>
+    <button onclick="exportGeoJSON()">Экспорт GeoJSON</button>
+    <button onclick="exportKML()">Экспорт KML</button>
+</div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://unpkg.com/@turf/turf@6.5.0/turf.min.js"></script>
+<script src="https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.js"></script>
+<script src="https://unpkg.com/leaflet-kml@1.0.1/L.KML.min.js"></script>
+
+<script>
+if (typeof L === 'undefined') {
+    alert('Leaflet НЕ ЗАГРУЗИЛСЯ — отключите adblock, проверьте интернет! Локально - работает.');
+    console.error('Leaflet failed to load');
+} else {
+    console.log('Leaflet OK, version:', L.version);
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+    console.log('DOM loaded — map init');
+    const map = L.map('map', { 
+        doubleClickZoom: false,
+        attributionControl: false,
+        zoomControl: true
+    }).setView([53.90, 27.55], 12);
+
+    if (map.attributionControl) map.attributionControl.remove();
+    map.getContainer().style.background = '#dddddd';
+
+    const tileOptions = { attribution: '', maxZoom: 22, maxNativeZoom: 19 };
+
+    const osm = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', tileOptions).addTo(map);
+    const esri = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', tileOptions);
+    const googleSat = L.tileLayer('https://mt1.google.com/vt/lyrs=s&x={x}&y={y}&z={z}', tileOptions);
+
+    L.control.layers({'OSM': osm, 'ESRI Satellite': esri, 'Google Satellite': googleSat}, {}, {position: 'topright', collapsed: true}).addTo(map);
+
+    const forceResize = () => {
+        console.log('forceResize');
+        setTimeout(() => map.invalidateSize({pan: true, animate: true}), 50);
+    };
+    map.whenReady(() => { console.log('Map ready'); forceResize(); });
+    [100, 300, 500, 800, 1200, 2000, 3000, 5000].forEach(t => setTimeout(forceResize, t));
+    window.addEventListener('resize', forceResize);
+    window.addEventListener('orientationchange', forceResize);
+
+    const drawnItems = new L.FeatureGroup().addTo(map);
+    let searchPolygon = null;
+    let searchFeature = null;
+    let gridLayer = L.layerGroup().addTo(map);
+    let zoneLayers = L.layerGroup().addTo(map);
+    let routeLayers = L.layerGroup().addTo(map);
+    let gridCells = [];
+    let groups = [];
+    const colors = ['#e41a1c','#377eb8','#4daf4a','#984ea3','#ff7f00','#ffff33','#a65628','#f781bf','#999999','#66c2a5'];
+
+    // Leaflet.draw setup
+    const drawControl = new L.Control.Draw({
+        position: 'topleft',
+        draw: {
+            polygon: {
+                allowIntersection: false,
+                shapeOptions: {
+                    color: '#3388ff',
+                    weight: 4,
+                    opacity: 1,
+                    fillOpacity: 0.2
+                }
+            },
+            polyline: false,
+            circle: false,
+            rectangle: false,
+            marker: false,
+            circlemarker: false
+        },
+        edit: {
+            featureGroup: drawnItems,
+            remove: false
+        }
+    });
+    map.addControl(drawControl);
+
+    map.on(L.Draw.Event.CREATED, function (e) {
+        const type = e.layerType;
+        const layer = e.layer;
+
+        if (type === 'polygon') {
+            console.log('Polygon created');
+            if (searchPolygon) {
+                drawnItems.removeLayer(searchPolygon);
+            }
+            searchPolygon = layer;
+            searchFeature = searchPolygon.toGeoJSON();
+            drawnItems.addLayer(searchPolygon);
+            document.getElementById('gridControls').style.display = 'block';
+            forceResize();
+        }
+    });
+
+    window.startDrawing = function() {
+        // Только удаляем предыдущий полигон, не всю карту
+        if (searchPolygon) {
+            drawnItems.removeLayer(searchPolygon);
+            searchPolygon = null;
+            searchFeature = null;
+        }
+        new L.Draw.Polygon(map).enable();
+        console.log('Drawing enabled');
+    };
+
+    window.clearMap = function() {
+        if (confirm('Очистить карту?')) {
+            drawnItems.clearLayers();
+            gridLayer.clearLayers();
+            zoneLayers.clearLayers();
+            routeLayers.clearLayers();
+            gridCells = [];
+            groups = [];
+            searchPolygon = null;
+            searchFeature = null;
+            document.getElementById('gridControls').style.display = 'none';
+            updateGroupsTable();
+            forceResize();
+        }
+    };
+
+    window.getColumnLabel = function(n) {
+        let s = '';
+        while (n >= 0) { s = String.fromCharCode(65 + (n % 26)) + s; n = Math.floor(n / 26) - 1; }
+        return s || 'A';
+    };
+
+    window.generateGrid = function() {
+        if (!searchFeature) return alert('Нарисуй полигон!');
+        gridLayer.clearLayers();
+        gridCells = [];
+
+        let size = parseFloat(document.getElementById('gridCustom').value) || parseFloat(document.getElementById('gridPreset').value);
+        if (!size || size <= 0) return alert('Размер грида!');
+
+        const bbox = turf.bbox(searchFeature);
+        const avgLat = (bbox[1] + bbox[3]) / 2;
+        const metersPerDegLat = 111132.92 - 559.82 * Math.cos(2 * avgLat * Math.PI/180) + 1.175 * Math.cos(4 * avgLat * Math.PI/180);
+        const metersPerDegLon = 111412.84 * Math.cos(avgLat * Math.PI/180) - 93.5 * Math.cos(3 * avgLat * Math.PI/180);
+        const degLat = size / metersPerDegLat;
+        const degLon = size / metersPerDegLon;
+
+        let startLon = Math.floor(bbox[0] / degLon) * degLon - degLon;
+        let startLat = Math.floor(bbox[1] / degLat) * degLat - degLat;
+
+        let col = 0;
+        for (let lon = startLon; lon <= bbox[2] + degLon; lon += degLon) {
+            let row = 1;
+            for (let lat = startLat; lat <= bbox[3] + degLat; lat += degLat) {
+                const cellPoly = turf.polygon([[[lon, lat], [lon + degLon, lat], [lon + degLon, lat + degLat], [lon, lat + degLat], [lon, lat]]]);
+                let clipped = turf.intersect(cellPoly, searchFeature); // Фикс: intersect напрямую, без featureCollection
+                if (clipped && turf.area(clipped) > 100) {
+                    const area = turf.area(clipped);
+                    const center = turf.center(clipped);
+                    const label = getColumnLabel(col) + row;
+
+                    clipped.properties = {label, area};
+                    const layer = L.geoJSON(clipped, {style: {color: '#3388ff', weight: 1, fillOpacity: 0.05}}).addTo(gridLayer);
+                    const icon = L.divIcon({className: 'grid-label', html: label, iconSize: [30,30], iconAnchor: [15,15]});
+                    L.marker(center.geometry.coordinates.slice().reverse(), {icon}).addTo(gridLayer);
+
+                    gridCells.push({geojson: clipped, layer, center: turf.point(center.geometry.coordinates), area});
+                }
+                row++;
+            }
+            col++;
+        }
+        forceResize();
+    };
+
+    window.addGroup = function() {
+        const base = document.getElementById('baseCall').value.trim() || 'Group';
+        let maxNum = 0;
+        groups.forEach(g => {
+            if (g.callsign.startsWith(base + '-')) {
+                const n = parseInt(g.callsign.split('-')[1]);
+                if (n > maxNum) maxNum = n;
+            }
+        });
+        let num = document.getElementById('startNum').value ? parseInt(document.getElementById('startNum').value) : maxNum + 1;
+        if (isNaN(num) || num < 1) num = maxNum + 1;
+        const callsign = `${base}-${num.toString().padStart(2,'0')}`;
+        const people = parseInt(document.getElementById('people').value) || 0;
+        const cars = parseInt(document.getElementById('cars').value) || 0;
+        const bla = document.getElementById('hasBla').checked;
+
+        groups.push({callsign, people, cars, bla, color: colors[groups.length % colors.length], cells: [], area: 0});
+        updateGroupsTable();
+        document.getElementById('startNum').value = '';
+    };
+
+    window.updateGroupsTable = function() {
+        const table = document.getElementById('groupsTable');
+        table.innerHTML = '<tr><th>Позывной</th><th>Люди</th><th>Авто</th><th>БЛА</th><th>Площадь м²</th><th>Квадратов</th></tr>';
+        groups.forEach(g => {
+            const row = table.insertRow();
+            row.style.backgroundColor = g.color + '33';
+            row.onclick = () => { if (g.cells.length) map.fitBounds(getGroupBounds(g)); };
+            row.insertCell().innerText = g.callsign;
+            row.insertCell().innerText = g.people;
+            row.insertCell().innerText = g.cars;
+            row.insertCell().innerText = g.bla ? 'Да' : 'Нет';
+            row.insertCell().innerText = Math.round(g.area);
+            row.insertCell().innerText = g.cells.length;
+        });
+    };
+
+    window.getGroupBounds = function(g) {
+        if (g.cells.length === 0) return map.getBounds();
+        let merged = g.cells[0].geojson;
+        for (let j = 1; j < g.cells.length; j++) merged = turf.union(merged, g.cells[j].geojson);
+        return L.geoJSON(merged).getBounds();
+    };
+
+    window.assignZones = function() {
+        if (gridCells.length === 0) return alert('Грид!');
+        if (groups.length === 0) return alert('Группы!');
+        zoneLayers.clearLayers();
+        groups.forEach(g => { g.cells = []; g.area = 0; });
+
+        // Простое распределение по площади (без k-means)
+        gridCells.sort((a, b) => b.area - a.area);
+        groups.sort((a, b) => (b.bla ? 1e6 : 0) + b.people * 100 + b.cars - ((a.bla ? 1e6 : 0) + a.people * 100 + a.cars));
+
+        let groupIndex = 0;
+        for (let cell of gridCells) {
+            groups[groupIndex].cells.push(cell);
+            groups[groupIndex].area += cell.area;
+            groupIndex = (groupIndex + 1) % groups.length;
+        }
+
+        gridCells.forEach(cell => {
+            groups.forEach(g => {
+                if (g.cells.includes(cell)) {
+                    cell.layer.setStyle({fillColor: g.color, fillOpacity: 0.45, color: g.color, weight: 2, opacity: 0.9});
+                }
+            });
+        });
+
+        groups.forEach(g => {
+            if (g.cells.length === 0) return;
+            let merged = g.cells[0].geojson;
+            for (let j = 1; j < g.cells.length; j++) merged = turf.union(merged, g.cells[j].geojson);
+            const center = turf.center(merged);
+            L.geoJSON(merged, {style: {color: g.color, weight: 6, fillOpacity: 0, dashArray: '10,15', opacity: 0.9}}).addTo(zoneLayers);
+            L.marker(center.geometry.coordinates.slice().reverse(), {
+                icon: L.divIcon({className: 'group-label', html: g.callsign, iconSize: [120,44], iconAnchor: [60,22]})
+            }).addTo(zoneLayers);
+        });
+
+        updateGroupsTable();
+        forceResize();
+    };
+
+    window.generateRoutes = function() {
+        routeLayers.clearLayers();
+        const stepPesh = parseFloat(document.getElementById('stepPesh').value) || 10;
+        const stepBla = parseFloat(document.getElementById('stepBla').value) || 50;
+        const blaSpeed = 10; // m/s
+        const blaTimeMax = 25 * 60; // 25 min in sec
+
+        groups.forEach(g => {
+            if (g.cells.length === 0) return;
+            let merged = g.cells[0].geojson;
+            for (let j = 1; j < g.cells.length; j++) merged = turf.union(merged, g.cells[j].geojson);
+
+            const bbox = turf.bbox(merged);
+            const avgLat = (bbox[1] + bbox[3]) / 2;
+            const metersPerDegLat = 111132.92 - 559.82 * Math.cos(2 * avgLat * Math.PI/180) + 1.175 * Math.cos(4 * avgLat * Math.PI/180);
+            const stepDeg = (g.bla ? stepBla : stepPesh) / metersPerDegLat;
+
+            let paths = [];
+            let direction = 1; // 1 left to right, -1 right to left
+            for (let lat = bbox[1]; lat <= bbox[3]; lat += stepDeg) {
+                let line = turf.lineString([[bbox[0], lat], [bbox[2], lat]]);
+                let clipped = turf.lineIntersect(line, merged); // Клиппинг
+                if (clipped.features.length > 0) {
+                    let coords = clipped.features[0].geometry.coordinates;
+                    if (direction === -1) coords = coords.reverse();
+                    paths.push(coords);
+                    direction = -direction;
+                }
+            }
+
+            // Соединяем пути в один zig-zag
+            let fullPath = paths[0];
+            for (let i = 1; i < paths.length; i++) {
+                fullPath = fullPath.concat(paths[i]);
+            }
+
+            const length = turf.length(turf.lineString(fullPath), {units: 'meters'});
+            if (g.bla && length / blaSpeed > blaTimeMax) {
+                console.log('BLA route too long for battery', g.callsign);
+                return; // Or split path
+            }
+
+            L.polyline(fullPath.map(c => [c[1], c[0]]), {color: g.color, weight: 3, dashArray: '5, 5'}).addTo(routeLayers);
+            console.log('Route added for group', g.callsign, 'length:', length, 'm');
+        });
+        forceResize();
+    };
+
+    window.exportGeoJSON = function() {
+        const data = {type: "FeatureCollection", features: [searchFeature, ...gridCells.map(c => c.geojson), ...groups.map(g => {
+            if (g.cells.length === 0) return null;
+            let merged = g.cells[0].geojson;
+            for (let j=1; j<g.cells.length; j++) merged = turf.union(merged, g.cells[j].geojson);
+            merged.properties = {group: g.callsign, people: g.people, cars: g.cars, bla: g.bla};
+            return merged;
+        }).filter(Boolean)]};
+        const blob = new Blob([JSON.stringify(data)], {type: 'application/json'});
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a'); a.href = url; a.download = 'pso_plan.geojson'; a.click();
+    };
+
+    window.exportKML = function() {
+        const kml = new L.KML();
+        drawnItems.eachLayer(l => kml.addLayer(l));
+        gridLayer.eachLayer(l => kml.addLayer(l));
+        zoneLayers.eachLayer(l => kml.addLayer(l));
+        routeLayers.eachLayer(l => kml.addLayer(l));
+        const blob = new Blob([kml.getKML()], {type: 'application/vnd.google-earth.kml+xml'});
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a'); a.href = url; a.download = 'pso_plan.kml'; a.click();
+    };
+
+    window.saveProject = function() {
+        const data = {searchFeature, gridCells: gridCells.map(c => c.geojson), groups};
+        localStorage.setItem('psoProject', JSON.stringify(data));
+        alert('Сохранено!');
+    };
+
+    window.loadProject = function() {
+        const saved = localStorage.getItem('psoProject');
+        if (saved && confirm('Загрузить?')) {
+            const data = JSON.parse(saved);
+            clearMap();
+            searchFeature = data.searchFeature;
+            alert('Загружено базово — грид/зоны пересоздай');
+            forceResize();
+        }
+    };
+
+    if (window.Telegram?.WebApp) {
+        window.Telegram.WebApp.ready();
+        window.Telegram.WebApp.expand();
+        setTimeout(forceResize, 800);
+    }
+
+    forceResize();
+    console.log('PSO MapBY Dfly v3.4 INIT COMPLETE');
 });
 </script>
 </body>
