@@ -2,7 +2,7 @@
 <html lang="ru">
 <head>
     <meta charset="utf-8">
-    <title>PSO MapBY Dfly v4.0 — UPDATED WITH BUFFER & RUS LABELS</title>
+    <title>PSO MapBY Dfly v3.5 — FIXED RELOAD & DEBUG REMOVED</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <link rel="stylesheet" href="https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.css" />
@@ -27,7 +27,7 @@
 <body>
 <div id="map"></div>
 <div id="sidebar">
-    <h2>PSO Координатор v4.0 — FIXED</h2>
+    <h2>PSO Координатор v3.5 — FIXED</h2>
     <button onclick="clearMap()" class="danger">Очистить карту</button>
     <button onclick="startDrawing()" class="primary">Нарисовать полигон поиска</button>
     <button onclick="saveProject()" class="primary">Сохранить план поиска</button>
@@ -70,6 +70,7 @@
 <script src="https://unpkg.com/@turf/turf@6.5.0/turf.min.js"></script>
 <script src="https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.js"></script>
 <script src="https://unpkg.com/leaflet-kml@1.0.1/L.KML.min.js"></script>
+<script src="https://dtutic.github.io/Leaflet.EdgeScaleBar/dist/leaflet.edgescalebar.js"></script>
 
 <script>
 if (typeof L === 'undefined') {
@@ -98,6 +99,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
     L.control.layers({'OSM': osm, 'ESRI Satellite': esri, 'Google Satellite': googleSat}, {}, {position: 'topright', collapsed: true}).addTo(map);
 
+    // EdgeScaleBar
+    L.control.edgeScale({ position: 'bottomleft' }).addTo(map);
+
     const forceResize = () => {
         console.log('forceResize');
         setTimeout(() => map.invalidateSize({pan: true, animate: true}), 50);
@@ -113,6 +117,7 @@ document.addEventListener('DOMContentLoaded', () => {
     let gridLayer = L.layerGroup().addTo(map);
     let zoneLayers = L.layerGroup().addTo(map);
     let routeLayers = L.layerGroup().addTo(map);
+    let roadLayer = L.layerGroup().addTo(map); // Для дорог
     let gridCells = [];
     let groups = [];
     const colors = ['#e41a1c','#377eb8','#4daf4a','#984ea3','#ff7f00','#ffff33','#a65628','#f781bf','#999999','#66c2a5'];
@@ -156,6 +161,7 @@ document.addEventListener('DOMContentLoaded', () => {
             searchFeature = searchPolygon.toGeoJSON();
             drawnItems.addLayer(searchPolygon);
             document.getElementById('gridControls').style.display = 'block';
+            loadRoads(); // Загрузка дорог после создания полигона
             forceResize();
         }
     });
@@ -177,6 +183,7 @@ document.addEventListener('DOMContentLoaded', () => {
             gridLayer.clearLayers();
             zoneLayers.clearLayers();
             routeLayers.clearLayers();
+            roadLayer.clearLayers();
             gridCells = [];
             groups = [];
             searchPolygon = null;
@@ -430,7 +437,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     forceResize();
-    console.log('PSO MapBY Dfly v4.0 INIT COMPLETE');
+    console.log('PSO MapBY Dfly v3.5 INIT COMPLETE');
 });
 </script>
 </body>
