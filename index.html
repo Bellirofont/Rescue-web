@@ -30,8 +30,8 @@
     <h2>PSO Координатор v4.0 — FIXED</h2>
     <button onclick="clearMap()" class="danger">Очистить карту</button>
     <button onclick="startDrawing()" class="primary">Нарисовать полигон поиска</button>
-    <button onclick="saveProject()">Сохранить проект</button>
-    <button onclick="loadProject()">Загрузить проект</button>
+    <button onclick="saveProject()" class="primary">Сохранить план поиска</button>
+    <button onclick="loadProject()" class="primary">Загрузить план поиска</button>
     <hr>
     <div id="gridControls" style="display:none;">
         <h4>Грид</h4>
@@ -60,7 +60,7 @@
     <h4>Маршруты</h4>
     <input type="number" id="stepPesh" placeholder="Шаг пеших (м)" value="10">
     <input type="number" id="stepBla" placeholder="Шаг БЛА (м)" value="50">
-    <button onclick="generateRoutes()" class="accent">Генерировать маршруты</button>
+    <button onclick="generateRoutes()" class="accent">Предложить маршруты</button>
     <hr>
     <button onclick="exportGeoJSON()">Экспорт GeoJSON</button>
     <button onclick="exportKML()">Экспорт KML</button>
@@ -430,7 +430,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     forceResize();
-    console.log('PSO MapBY Dfly v3.5 INIT COMPLETE');
+    console.log('PSO MapBY Dfly v4.0 INIT COMPLETE');
 });
 </script>
 </body>
