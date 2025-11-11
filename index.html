@@ -2,10 +2,10 @@
 <html lang="ru">
 <head>
     <meta charset="utf-8">
-    <title>PSO MapBY Dfly v3.2 — FIXED DRAW CLEAR & 404</title>
+    <title>PSO MapBY Dfly v3.3 — FIXED DRAW & ROUTES</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-    <link rel="stylesheet" href="https://unpkg.com/@geoman-io/leaflet-geoman-free@2.17.0/dist/leaflet-geoman-free.css" />
+    <link rel="stylesheet" href="https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.css" />
     <style>
         html, body { height: 100%; margin: 0; padding: 0; font-family: Arial, sans-serif; overflow: hidden; background: #fff; }
         #map { position: absolute; top: 0; bottom: 0; left: 0; right: 0; width: 100vw; height: 100vh; background: #dddddd; z-index: 1; }
@@ -29,7 +29,7 @@
 <div id="map"></div>
 <div id="debug">ДЕБАГ: СКРИПТ ЗАГРУЖЕН. DRAW FIX. F12 Console для логов.</div>
 <div id="sidebar">
-    <h2>PSO Координатор v3.2 — FIXED</h2>
+    <h2>PSO Координатор v3.3 — FIXED</h2>
     <button onclick="clearMap()" class="danger">Очистить карту</button>
     <button onclick="startDrawing()" class="primary">Нарисовать полигон поиска</button>
     <button onclick="saveProject()">Сохранить проект</button>
@@ -70,7 +70,7 @@
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="https://unpkg.com/@turf/turf@6.5.0/turf.min.js"></script>
-<script src="https://unpkg.com/@geoman-io/leaflet-geoman-free@2.17.0/dist/leaflet-geoman-free.js"></script>
+<script src="https://unpkg.com/leaflet.draw@1.0.4/dist/leaflet.draw.js"></script>
 <script src="https://unpkg.com/leaflet-kml@1.0.1/L.KML.min.js"></script>
 
 <script>
@@ -88,13 +88,6 @@ document.addEventListener('DOMContentLoaded', () => {
         attributionControl: false,
         zoomControl: true
     }).setView([53.90, 27.55], 12);
-
-    // setGlobalOptions после проверки pm
-    if (map.pm) {
-        map.pm.setGlobalOptions({ pinchZoom: false, snappable: true, snapDistance: 30, allowSelfIntersection: false });
-    } else {
-        console.error('Geoman not loaded, pm undefined');
-    }
 
     if (map.attributionControl) map.attributionControl.remove();
     map.getContainer().style.background = '#dddddd';
@@ -121,10 +114,53 @@ document.addEventListener('DOMContentLoaded', () => {
     let searchFeature = null;
     let gridLayer = L.layerGroup().addTo(map);
     let zoneLayers = L.layerGroup().addTo(map);
-    let routeLayers = L.layerGroup().addTo(map); // Для маршрутов
+    let routeLayers = L.layerGroup().addTo(map);
     let gridCells = [];
     let groups = [];
     const colors = ['#e41a1c','#377eb8','#4daf4a','#984ea3','#ff7f00','#ffff33','#a65628','#f781bf','#999999','#66c2a5'];
+
+    // Leaflet.draw setup
+    const drawControl = new L.Control.Draw({
+        position: 'topleft',
+        draw: {
+            polygon: {
+                allowIntersection: false,
+                shapeOptions: {
+                    color: '#3388ff',
+                    weight: 4,
+                    opacity: 1,
+                    fillOpacity: 0.2
+                }
+            },
+            polyline: false,
+            circle: false,
+            rectangle: false,
+            marker: false,
+            circlemarker: false
+        },
+        edit: {
+            featureGroup: drawnItems,
+            remove: false
+        }
+    });
+    map.addControl(drawControl);
+
+    map.on(L.Draw.Event.CREATED, function (e) {
+        const type = e.layerType;
+        const layer = e.layer;
+
+        if (type === 'polygon') {
+            console.log('Polygon created');
+            if (searchPolygon) {
+                drawnItems.removeLayer(searchPolygon);
+            }
+            searchPolygon = layer;
+            searchFeature = searchPolygon.toGeoJSON();
+            drawnItems.addLayer(searchPolygon);
+            document.getElementById('gridControls').style.display = 'block';
+            forceResize();
+        }
+    });
 
     window.startDrawing = function() {
         // Только удаляем предыдущий полигон, не всю карту
@@ -133,26 +169,9 @@ document.addEventListener('DOMContentLoaded', () => {
             searchPolygon = null;
             searchFeature = null;
         }
-        if (map.pm) {
-            map.pm.enableDraw('Polygon', { finishOn: 'dblclick', pathOptions: { color: '#3388ff', weight: 4, fillOpacity: 0.2 } });
-            console.log('Drawing enabled');
-        } else {
-            alert('Geoman not loaded, drawing not available');
-        }
+        new L.Draw.Polygon(map).enable();
+        console.log('Drawing enabled');
     };
-
-    map.on('pm:create', e => {
-        if (e.shape === 'Polygon') {
-            console.log('Polygon created');
-            map.pm.disableDraw();
-            searchPolygon = e.layer;
-            searchFeature = searchPolygon.toGeoJSON();
-            drawnItems.addLayer(searchPolygon);
-            document.getElementById('gridControls').style.display = 'block';
-            searchPolygon.pm.disable();
-            forceResize();
-        }
-    });
 
     window.clearMap = function() {
         if (confirm('Очистить карту?')) {
@@ -166,8 +185,6 @@ document.addEventListener('DOMContentLoaded', () => {
             searchFeature = null;
             document.getElementById('gridControls').style.display = 'none';
             updateGroupsTable();
-            map.pm.disableDraw();
-            localStorage.removeItem('psoProject');
             forceResize();
         }
     };
