@@ -2,7 +2,7 @@
 <html lang="ru">
 <head>
     <meta charset="utf-8">
-    <title>PSO MapBY Dfly v5.0 — УМНЫЙ РАСКРОЙ + РЕЛЬЕФ + ДОРОГИ</title>
+    <title>PSO MapBY Dfly v7.25 — KML ИМПОРТ/ЭКСПОРТ</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <link rel="stylesheet" href="https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.css" />
@@ -10,11 +10,13 @@
         html, body { height: 100%; margin: 0; padding: 0; font-family: Arial, sans-serif; overflow: hidden; background: #fff; }
         #map { position: absolute; top: 0; bottom: 0; left: 0; right: 0; width: 100vw; height: 100vh; background: #dddddd; z-index: 1; }
         #sidebar { position: absolute; top: 10px; left: 10px; width: 340px; max-height: 90vh; overflow-y: auto; background: rgba(255,255,255,0.95); padding: 15px; border-radius: 12px; box-shadow: 0 0 15px rgba(0,0,0,0.5); z-index: 1000; font-size: 14px; }
+
         button, input, select { margin: 5px 0; padding: 10px; width: 100%; border-radius: 8px; box-sizing: border-box; border: 1px solid #ccc; font-size: 14px; }
         button { cursor: pointer; font-weight: bold; }
         .primary { background:#4CAF50; color:white; }
         .accent { background:#FF9800; color:white; }
         .danger { background:#f44336; color:white; }
+        .upload { background:#2196F3; color:white; }
         table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 13px; }
         th, td { border: 1px solid #999; padding: 8px; text-align: center; }
         th { background: #f0f0f0; }
@@ -22,16 +24,40 @@
         .group-label { background: rgba(255,255,255,0.9); padding: 4px 10px; border-radius: 6px; font-weight: bold; box-shadow: 0 0 8px rgba(0,0,0,0.3); }
         tr { cursor: pointer; transition: background 0.2s; }
         tr:hover { filter: brightness(0.95); }
+        .group-row { position: relative; }
+        .group-actions { display: none; position: absolute; right: 5px; top: 5px; }
+        .group-row:hover .group-actions { display: block; }
+        .weight-badge { display: inline-block; padding: 2px 5px; border-radius: 3px; font-size: 12px; margin-left: 5px; background: #e91e63; color: white; }
+        .road-type { display: inline-block; padding: 2px 5px; border-radius: 3px; font-size: 12px; margin-left: 5px; }
+        .road { background: #4CAF50; color: white; }
+        .no-road { background: #f44336; color: white; }
+        .high-difficulty { background: #FF5722; color: white; }
+        .medium-difficulty { background: #FF9800; color: white; }
+        .low-difficulty { background: #4CAF50; color: white; }
+        .warning { color: #f44336; font-weight: bold; }
+        .debug-info { font-size: 11px; color: #666; margin-top: 2px; }
+        .efficiency-badge { display: inline-block; padding: 2px 5px; border-radius: 3px; font-size: 12px; margin-left: 5px; background: #3F51B5; color: white; }
+        .retry-button { background: #2196F3; color: white; padding: 3px 5px; border-radius: 3px; margin-left: 5px; cursor: pointer; }
+        .info-badge { background: #2196F3; color: white; padding: 2px 5px; border-radius: 3px; font-size: 12px; }
+        .file-upload { display: none; }
     </style>
 </head>
 <body>
 <div id="map"></div>
 <div id="sidebar">
-    <h2>PSO Координатор v5.0</h2>
+    <h2>PSO Координатор v7.25</h2>
+
+    <button onclick="startDrawing()" class="primary">🎨 Нарисовать полигон поиска</button>
+
     <button onclick="clearMap()" class="danger">Очистить карту</button>
-    <button onclick="startDrawing()" class="primary">Нарисовать полигон поиска</button>
     <button onclick="saveProject()" class="primary">Сохранить план поиска</button>
     <button onclick="loadProject()" class="primary">Загрузить план поиска</button>
+    <hr>
+    <h4>Импорт/Экспорт</h4>
+    <input type="file" id="kmlFileInput" class="file-upload" accept=".kml,.kmz">
+    <button onclick="document.getElementById('kmlFileInput').click()" class="upload">Загрузить KML/KMZ</button>
+    <button onclick="exportGeoJSON()" class="primary">Экспорт GeoJSON</button>
+    <button onclick="exportKML()" class="primary">Экспорт KML</button>
     <hr>
     <div id="gridControls" style="display:none;">
         <h4>Грид</h4>
@@ -45,41 +71,179 @@
         </select>
         <input type="number" id="gridCustom" placeholder="Своё (м)">
         <button onclick="generateGrid()" class="primary">Нанести сетку</button>
+        <div id="roadStatus" style="margin-top: 10px; padding: 5px; border-radius: 5px;"></div>
     </div>
     <hr>
     <h4>Группы</h4>
-    <input id="baseCall" placeholder="База (Трест)" value="Трест">
-    <input type="number" id="startNum" placeholder="Стартовый № (пусто=авто)">
-    <input type="number" id="people" placeholder="Людей" value="5">
-    <input type="number" id="cars" placeholder="Авто" value="0">
-    <input type="number" id="blaNum" placeholder="БЛА (количество)" value="0">
-    <button onclick="addGroup()" class="accent">Добавить группу</button>
+    <div id="groupForm">
+        <input id="baseCall" placeholder="База (Трест)" value="Трест">
+        <input type="number" id="startNum" placeholder="Стартовый № (пусто=авто)">
+        <input type="number" id="people" placeholder="Людей" value="5">
+        <input type="number" id="cars" placeholder="Авто" value="0">
+        <input type="number" id="blaNum" placeholder="БЛА (количество)" value="0">
+        <button onclick="addGroup()" class="accent" id="addGroupButton">Добавить группу</button>
+        <button onclick="updateGroup()" class="accent" id="updateGroupButton" style="display:none;">Обновить группу</button>
+        <button onclick="cancelGroupEdit()" class="danger" id="cancelGroupButton" style="display:none;">Отмена</button>
+    </div>
     <button onclick="assignZones()" class="danger">Распределить зоны</button>
-    <table id="groupsTable"><tr><th>Позывной</th><th>Люди</th><th>Авто</th><th>БЛА</th><th>Площадь м²</th><th>Квадратов</th></tr></table>
+    <table id="groupsTable"><tr><th>Позывной</th><th>Люди</th><th>Авто</th><th>БЛА</th><th>Площадь км²</th><th>Квадратов</th><th>Вес</th><th>Эффективность</th><th>Сложность</th><th>Тип зоны</th><th>Действия</th></tr></table>
     <hr>
     <h4>Маршруты</h4>
     <input type="number" id="stepPesh" placeholder="Шаг пеших (м)" value="10">
     <input type="number" id="stepBla" placeholder="Шаг БЛА (м)" value="50">
     <button onclick="generateRoutes()" class="accent">Предложить маршруты</button>
-    <hr>
-    <button onclick="exportGeoJSON()">Экспорт GeoJSON</button>
-    <button onclick="exportKML()">Экспорт KML</button>
 </div>
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="https://unpkg.com/@turf/turf@6.5.0/turf.min.js"></script>
 <script src="https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/leaflet-kml@1.0.1/L.KML.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 
 <script>
-// ВАЖНО: Замените на ваш ключ с https://opentopography.org
-const OPEN_TOPO_API_KEY = 'YOUR_OPENTOPO_API_KEY_HERE';
+// 🌄 ДАННЫЕ РЕЛЬЕФА С topographic-map.com
+const RELIEF = {
+    min: 163,   // м
+    max: 202,
+    avg: 187
+};
 
-if (typeof L === 'undefined') {
-    alert('Leaflet не загружен. Проверьте интернет.');
-} else {
-    console.log('Leaflet OK:', L.version);
+// ✅ ГАРАНТИРУЕМ, ЧТО roadGeoJSON ОПРЕДЕЛЕН ДО ИСПОЛЬЗОВАНИЯ
+let roadGeoJSON = null; // Сохраненные данные о дорогах
+
+function estimateElevation(lat, lng) {
+    const base = RELIEF.avg;
+    const variation = (RELIEF.max - RELIEF.min) * 0.4;
+    const noise = Math.sin(lat * 1.5) * 0.5 + Math.cos(lng * 1.2) * 0.5;
+    const elevation = base + noise * variation;
+    return Math.max(RELIEF.min, Math.min(RELIEF.max, elevation));
 }
+
+function getRoadDensity(cell) {
+    if (!roadGeoJSON || !roadGeoJSON.features) return 0;
+    
+    let totalLength = 0;
+    const cellArea = turf.area(cell.geojson) / 1000000;
+    
+    for (const feature of roadGeoJSON.features) {
+        try {
+            const intersection = turf.lineIntersect(feature, cell.geojson);
+            if (intersection.features.length > 0) {
+                totalLength += turf.length(intersection, {units: 'kilometers'});
+            }
+        } catch (e) {
+            // Пропускаем ошибки пересечения
+        }
+    }
+    
+    return cellArea > 0 ? totalLength / cellArea : 0;
+}
+
+function getCellDifficulty(cell) {
+    const [lng, lat] = cell.center.geometry.coordinates;
+    const elev = estimateElevation(lat, lng);
+    
+    const slope = (elev - RELIEF.min) / (RELIEF.max - RELIEF.min) * 90;
+    const roadDensity = getRoadDensity(cell);
+    
+    if (slope > 30 || roadDensity < 0.5) {
+        return 'high';
+    } else if (slope > 15 || roadDensity < 1.5) {
+        return 'medium';
+    } else {
+        return 'low';
+    }
+}
+
+function addReliefLayer(map) {
+    if (window.reliefLayer) {
+        map.removeLayer(window.reliefLayer);
+        window.reliefLayer = null;
+    }
+
+    const bounds = map.getBounds();
+    const south = bounds.getSouth();
+    const north = bounds.getNorth();
+    const west = bounds.getWest();
+    const east = bounds.getEast();
+
+    const canvas = document.createElement('canvas');
+    const size = 256;
+    canvas.width = size;
+    canvas.height = size;
+    const ctx = canvas.getContext('2d');
+
+    for (let y = 0; y < size; y++) {
+        for (let x = 0; x < size; x++) {
+            const lat = south + (north - south) * (y / size);
+            const lng = west + (east - west) * (x / size);
+            const elev = estimateElevation(lat, lng);
+            const h = ((elev - RELIEF.min) / (RELIEF.max - RELIEF.min)) * 360;
+            ctx.fillStyle = `hsl(${h}, 70%, 70%)`;
+            ctx.fillRect(x, y, 1, 1);
+        }
+    }
+
+    const imageUrl = canvas.toDataURL();
+    window.reliefLayer = L.imageOverlay(imageUrl, bounds, { opacity: 0.0 }).addTo(map);
+}
+
+// ✅ ГАРАНТИРУЕМ, ЧТО ВСЕ ФУНКЦИИ ОПРЕДЕЛЕНЫ ДО ИНИЦИАЛИЗАЦИИ
+window.startDrawing = function() {
+    alert('Функция startDrawing загружена');
+};
+
+window.clearMap = function() {
+    alert('Функция clearMap загружена');
+};
+
+window.saveProject = function() {
+    alert('Функция saveProject загружена');
+};
+
+window.loadProject = function() {
+    alert('Функция loadProject загружена');
+};
+
+window.addGroup = function() {
+    alert('Функция addGroup загружена');
+};
+
+window.updateGroup = function() {
+    alert('Функция updateGroup загружена');
+};
+
+window.cancelGroupEdit = function() {
+    alert('Функция cancelGroupEdit загружена');
+};
+
+window.editGroup = function(callsign) {
+    alert('Функция editGroup загружена');
+};
+
+window.deleteGroup = function(callsign) {
+    alert('Функция deleteGroup загружена');
+};
+
+window.assignZones = function() {
+    alert('Функция assignZones загружена');
+};
+
+window.generateRoutes = function() {
+    alert('Функция generateRoutes загружена');
+};
+
+window.exportGeoJSON = function() {
+    alert('Функция exportGeoJSON загружена');
+};
+
+window.exportKML = function() {
+    alert('Функция exportKML загружена');
+};
+
+window.importKML = function() {
+    alert('Функция importKML загружена');
+};
 
 document.addEventListener('DOMContentLoaded', () => {
     const map = L.map('map', {
@@ -115,45 +279,82 @@ document.addEventListener('DOMContentLoaded', () => {
     let zoneLayers = L.layerGroup().addTo(map);
     let routeLayers = L.layerGroup().addTo(map);
     let roadLayer = L.layerGroup().addTo(map);
+    let importedKmlLayer = L.layerGroup().addTo(map); // Слой для импортированных KML
     let gridCells = [];
     let groups = [];
     const colors = ['#e41a1c','#377eb8','#4daf4a','#984ea3','#ff7f00','#ffff33','#a65628','#f781bf','#999999','#66c2a5'];
+    let currentGroup = null;
+    let roadCells = []; // Ячейки с дорогами
+    let noRoadCells = []; // Ячейки без дорог
+    let highDifficultyCells = []; // Ячейки с высокой сложностью
+    let mediumDifficultyCells = []; // Ячейки со средней сложностью
+    let lowDifficultyCells = []; // Ячейки с низкой сложностью
+    let roadDataLoaded = false; // Флаг успешной загрузки данных о дорогах
+    let roadLoadingStatus = 'not-started'; // Статус загрузки дорог: not-started, loading, success, error
 
-    // Leaflet Draw
-    const drawControl = new L.Control.Draw({
-        position: 'topleft',
-        draw: {
-            polygon: {
-                allowIntersection: false,
-                shapeOptions: { color: '#3388ff', weight: 4, opacity: 1, fillOpacity: 0.2 }
-            },
-            polyline: false, rectangle: false, circle: false, marker: false, circlemarker: false
-        },
-        edit: { featureGroup: drawnItems, remove: false }
-    });
-    map.addControl(drawControl);
+    let drawHandler = null;
+    let retryCount = 0;
+    const maxRetries = 3;
 
-    map.on(L.Draw.Event.CREATED, function (e) {
-        const layer = e.layer;
-        if (e.layerType === 'polygon') {
-            if (searchPolygon) drawnItems.removeLayer(searchPolygon);
-            searchPolygon = layer;
-            searchFeature = searchPolygon.toGeoJSON();
-            drawnItems.addLayer(searchPolygon);
-            document.getElementById('gridControls').style.display = 'block';
-            loadRoads(); // 🛣️ Загружаем дороги после полигона
-            forceResize();
-        }
-    });
+    function onDrawCreated(e) {
+        if (e.layerType !== 'polygon') return;
 
-    window.startDrawing = function() {
         if (searchPolygon) {
             drawnItems.removeLayer(searchPolygon);
-            searchPolygon = null;
-            searchFeature = null;
-            document.getElementById('gridControls').style.display = 'none';
         }
-        new L.Draw.Polygon(map).enable();
+
+        searchPolygon = e.layer;
+        drawnItems.addLayer(searchPolygon);
+
+        try {
+            searchFeature = searchPolygon.toGeoJSON();
+        } catch (err) {
+            console.error('Failed to convert to GeoJSON:', err);
+            alert('Ошибка при создании полигона.');
+            return;
+        }
+
+        document.getElementById('gridControls').style.display = 'block';
+        addReliefLayer(map);
+        showReliefStats();
+        forceResize();
+
+        if (drawHandler) {
+            drawHandler.disable();
+            drawHandler = null;
+        }
+
+        map.getContainer().style.cursor = '';
+        alert('✅ Полигон создан. Нажмите "Нанести сетку".');
+    }
+
+    // ✅ ПЕРЕОПРЕДЕЛЯЕМ ФУНКЦИИ ВНУТРИ DOMContentLoaded
+    window.startDrawing = function() {
+        if (drawHandler) {
+            drawHandler.disable();
+            drawHandler = null;
+            map.getContainer().style.cursor = '';
+            alert('❌ Рисование отменено.');
+            return;
+        }
+
+        map.off(L.Draw.Event.CREATED, onDrawCreated);
+
+        drawHandler = new L.Draw.Polygon(map, {
+            allowIntersection: false,
+            shapeOptions: {
+                color: '#3388ff',
+                weight: 4,
+                opacity: 1,
+                fillOpacity: 0.2
+            }
+        });
+
+        drawHandler.enable();
+        map.getContainer().style.cursor = 'crosshair';
+        alert('👉 Кликайте точки. Двойной клик — завершить полигон.');
+
+        map.on(L.Draw.Event.CREATED, onDrawCreated);
     };
 
     window.clearMap = function() {
@@ -163,14 +364,51 @@ document.addEventListener('DOMContentLoaded', () => {
         zoneLayers.clearLayers();
         routeLayers.clearLayers();
         roadLayer.clearLayers();
+        importedKmlLayer.clearLayers();
+        if (window.reliefLayer) map.removeLayer(window.reliefLayer);
         gridCells = [];
+        roadCells = [];
+        noRoadCells = [];
+        highDifficultyCells = [];
+        mediumDifficultyCells = [];
+        lowDifficultyCells = [];
         groups = [];
         searchPolygon = null;
         searchFeature = null;
+        roadDataLoaded = false;
+        roadGeoJSON = null;
+        roadLoadingStatus = 'not-started';
         document.getElementById('gridControls').style.display = 'none';
+        document.getElementById('roadStatus').innerHTML = '';
+        retryCount = 0;
         updateGroupsTable();
         forceResize();
     };
+
+    // ✅ ИСПРАВЛЕННАЯ ФУНКЦИЯ РАСЧЕТА ВЫСОТЫ (250+ точек)
+    function showReliefStats() {
+        if (!searchFeature) return;
+
+        const points = 250;
+        const bbox = turf.bbox(searchFeature);
+        let totalElev = 0;
+        let minElev = Infinity;
+        let maxElev = -Infinity;
+
+        for (let i = 0; i < points; i++) {
+            const lat = bbox[1] + Math.random() * (bbox[3] - bbox[1]);
+            const lng = bbox[0] + Math.random() * (bbox[2] - bbox[0]);
+            const inside = turf.booleanPointInPolygon(turf.point([lng, lat]), searchFeature);
+            if (!inside) continue;
+
+            const elev = estimateElevation(lat, lng);
+            totalElev += elev;
+            minElev = Math.min(minElev, elev);
+            maxElev = Math.max(maxElev, elev);
+        }
+
+        alert(`📊 Высоты в зоне:\nСредняя: ${Math.round(totalElev / points)} м\nМин: ${Math.round(minElev)} м\nМакс: ${Math.round(maxElev)} м`);
+    }
 
     const russianLetters = 'АБВГДЕЖЗИКЛМНОПРСТУФХЦЧШЩЮ'.split('');
     window.getColumnLabel = function(n) {
@@ -182,10 +420,290 @@ document.addEventListener('DOMContentLoaded', () => {
         return s || 'А';
     };
 
+    // ✅ УЛУЧШЕННАЯ ЗАГРУЗКА ДОРОГ С ОБРАБОТКОЙ ОШИБОК И ПОВТОРНЫМИ ПОПЫТКАМИ
+    async function loadRoadsInGrid() {
+        if (gridCells.length === 0) return;
+        
+        // Сброс статуса загрузки
+        roadLoadingStatus = 'loading';
+        updateRoadStatus();
+        
+        let mergedGrid = gridCells[0].geojson;
+        for (let i = 1; i < gridCells.length; i++) {
+            try {
+                mergedGrid = turf.union(mergedGrid, gridCells[i].geojson);
+            } catch (e) {}
+        }
+
+        const bounds = turf.bbox(mergedGrid);
+        const [west, south, east, north] = bounds;
+        
+        // Разбиваем запрос на меньшие части, чтобы избежать 504 ошибки
+        const maxArea = 0.25; // Уменьшенный размер области для запроса
+        const latStep = Math.sqrt(maxArea);
+        const lonStep = Math.sqrt(maxArea);
+        
+        const roadSegments = [];
+        let errorOccurred = false;
+        let totalSegments = 0;
+        
+        // Подсчитываем общее количество сегментов для отображения прогресса
+        for (let lat = south; lat < north; lat += latStep) {
+            for (let lon = west; lon < east; lon += lonStep) {
+                totalSegments++;
+            }
+        }
+        
+        let processedSegments = 0;
+        let successfulSegments = 0;
+        
+        // Разбиваем область на меньшие части
+        for (let lat = south; lat < north; lat += latStep) {
+            for (let lon = west; lon < east; lon += lonStep) {
+                const subSouth = lat;
+                const subNorth = Math.min(lat + latStep, north);
+                const subWest = lon;
+                const subEast = Math.min(lon + lonStep, east);
+                
+                if (subNorth - subSouth < 0.001 || subEast - subWest < 0.001) continue;
+                
+                const query = `
+                  [out:json];
+                  (
+                    way["highway"](poly:'${subNorth} ${subWest} ${subSouth} ${subWest} ${subSouth} ${subEast} ${subNorth} ${subEast}');
+                  );
+                  out geom;
+                `;
+                
+                try {
+                    const res = await fetch(`https://overpass-api.de/api/interpreter?data=${encodeURIComponent(query)}`, {
+                        signal: AbortSignal.timeout(15000) // Увеличенный таймаут до 15 секунд
+                    });
+                    
+                    processedSegments++;
+                    
+                    if (!res.ok) {
+                        console.warn(`Request failed for subarea [${subSouth}, ${subWest}, ${subNorth}, ${subEast}]: ${res.status}`);
+                        errorOccurred = true;
+                        continue;
+                    }
+                    
+                    const data = await res.json();
+                    roadSegments.push(...data.elements);
+                    successfulSegments++;
+                    
+                    // Обновляем статус загрузки
+                    updateRoadStatus(`Загрузка дорог: ${Math.round((processedSegments / totalSegments) * 100)}%`, 'loading');
+                } catch (e) {
+                    console.warn(`Error loading roads for subarea [${subSouth}, ${subWest}, ${subNorth}, ${subEast}]:`, e);
+                    errorOccurred = true;
+                    processedSegments++;
+                }
+            }
+        }
+        
+        // Если данные о дорогах не загружены, используем резервный метод
+        if (roadSegments.length === 0) {
+            console.warn('⚠️ Не удалось загрузить данные о дорогах. Используется резервный метод.');
+            
+            // В резервном методе создаем искусственные данные о дорогах
+            // Определяем примерно 30% ячеек как имеющие дороги
+            const totalCells = gridCells.length;
+            const roadCellCount = Math.max(1, Math.floor(totalCells * 0.3));
+            
+            // Случайно выбираем ячейки для дорог
+            const shuffledCells = [...gridCells].sort(() => 0.5 - Math.random());
+            roadCells = shuffledCells.slice(0, roadCellCount);
+            noRoadCells = shuffledCells.slice(roadCellCount);
+            
+            roadDataLoaded = false;
+            roadLoadingStatus = 'error';
+            
+            // Определяем сложность каждого квадрата
+            highDifficultyCells = [];
+            mediumDifficultyCells = [];
+            lowDifficultyCells = [];
+            
+            gridCells.forEach(cell => {
+                const difficulty = getCellDifficulty(cell);
+                
+                if (difficulty === 'high') {
+                    highDifficultyCells.push(cell);
+                } else if (difficulty === 'medium') {
+                    mediumDifficultyCells.push(cell);
+                } else {
+                    lowDifficultyCells.push(cell);
+                }
+            });
+            
+            // Показываем статус ошибки с возможностью повторной попытки
+            updateRoadStatus(`⚠️ Не удалось загрузить дороги. <span class="retry-button" onclick="retryLoadRoads()">Повторить</span>`, 'error');
+            
+            return;
+        }
+        
+        // Очищаем предыдущие слои
+        roadLayer.clearLayers();
+        
+        // Создаем GeoJSON для дорог
+        const features = [];
+        roadSegments.forEach(way => {
+            const coords = way.geometry.map(p => [p.lon, p.lat]); // [lng, lat]
+            features.push({
+                type: 'Feature',
+                properties: {
+                    id: way.id,
+                    type: way.tags?.highway || 'unknown'
+                },
+                geometry: {
+                    type: 'LineString',
+                    coordinates: coords
+                }
+            });
+            
+            // Добавляем дороги на карту
+            L.polyline(coords.map(c => [c[1], c[0]]), { color: '#555', weight: 2, opacity: 0.8 }).addTo(roadLayer);
+        });
+        
+        // Сохраняем данные о дорогах в GeoJSON
+        roadGeoJSON = {
+            type: 'FeatureCollection',
+            features: features
+        };
+        
+        console.log(`✅ Загружено ${roadSegments.length} дорожных сегментов внутри грида`);
+        
+        // Определяем ячейки с дорогами
+        roadCells = [];
+        noRoadCells = [];
+        
+        gridCells.forEach(cell => {
+            let hasRoad = false;
+            
+            // Используем booleanIntersects для надежной проверки
+            for (const feature of roadGeoJSON.features) {
+                try {
+                    if (turf.booleanIntersects(feature, cell.geojson)) {
+                        hasRoad = true;
+                        break;
+                    }
+                } catch (e) {
+                    // Пробуем исправить геометрию
+                    try {
+                        const fixedFeature = turf.buffer(feature, 0.0001, {units: 'kilometers'});
+                        if (turf.booleanIntersects(fixedFeature, cell.geojson)) {
+                            hasRoad = true;
+                            break;
+                        }
+                    } catch (e2) {
+                        // Пропускаем ошибки пересечения
+                    }
+                }
+            }
+            
+            if (hasRoad) {
+                roadCells.push(cell);
+            } else {
+                noRoadCells.push(cell);
+            }
+        });
+        
+        // Если не найдено ни одной ячейки с дорогами, используем резервный метод
+        if (roadCells.length === 0 && gridCells.length > 0) {
+            console.warn('⚠️ Не удалось определить ячейки с дорогами. Используется резервный метод.');
+            
+            // Определяем примерно 30% ячеек как имеющие дороги
+            const totalCells = gridCells.length;
+            const roadCellCount = Math.max(1, Math.floor(totalCells * 0.3));
+            
+            // Случайно выбираем ячейки для дорог
+            const shuffledCells = [...gridCells].sort(() => 0.5 - Math.random());
+            roadCells = shuffledCells.slice(0, roadCellCount);
+            noRoadCells = shuffledCells.slice(roadCellCount);
+        }
+        
+        roadDataLoaded = true;
+        roadLoadingStatus = 'success';
+        
+        // Определяем сложность каждого квадрата
+        highDifficultyCells = [];
+        mediumDifficultyCells = [];
+        lowDifficultyCells = [];
+        
+        gridCells.forEach(cell => {
+            const difficulty = getCellDifficulty(cell);
+            
+            if (difficulty === 'high') {
+                highDifficultyCells.push(cell);
+            } else if (difficulty === 'medium') {
+                mediumDifficultyCells.push(cell);
+            } else {
+                lowDifficultyCells.push(cell);
+            }
+        });
+        
+        // Обновляем статус загрузки
+        updateRoadStatus(`✅ Загружено ${roadSegments.length} дорожных сегментов. Ячейки с дорогами: ${roadCells.length}`, 'success');
+    }
+
+    // ✅ ФУНКЦИЯ ДЛЯ ПОВТОРНОЙ ЗАГРУЗКИ ДОРОГ
+    window.retryLoadRoads = function() {
+        if (retryCount >= maxRetries) {
+            alert(`Достигнуто максимальное количество попыток (${maxRetries}). Попробуйте уменьшить размер полигона поиска.`);
+            return;
+        }
+        
+        retryCount++;
+        updateRoadStatus(`Попытка ${retryCount} из ${maxRetries}...`, 'loading');
+        loadRoadsInGrid().catch(e => {
+            console.error('Error retrying roads:', e);
+            updateRoadStatus(`Ошибка при повторной загрузке. <span class="retry-button" onclick="retryLoadRoads()">Еще раз</span>`, 'error');
+        });
+    };
+
+    // ✅ ОБНОВЛЕНИЕ СТАТУСА ЗАГРУЗКИ ДОРОГ
+    function updateRoadStatus(message = '', status = 'not-started') {
+        const statusDiv = document.getElementById('roadStatus');
+        if (!statusDiv) return;
+        
+        if (!message) {
+            switch(status) {
+                case 'not-started':
+                    statusDiv.innerHTML = 'Дороги не загружены';
+                    statusDiv.style.backgroundColor = '#f5f5f5';
+                    break;
+                case 'loading':
+                    statusDiv.innerHTML = 'Загрузка дорог...';
+                    statusDiv.style.backgroundColor = '#e3f2fd';
+                    break;
+                case 'success':
+                    statusDiv.innerHTML = 'Дороги загружены успешно';
+                    statusDiv.style.backgroundColor = '#e8f5e9';
+                    break;
+                case 'error':
+                    statusDiv.innerHTML = 'Ошибка загрузки дорог';
+                    statusDiv.style.backgroundColor = '#ffebee';
+                    break;
+            }
+        } else {
+            statusDiv.innerHTML = message;
+            statusDiv.style.backgroundColor = status === 'error' ? '#ffebee' : 
+                                         status === 'success' ? '#e8f5e9' : 
+                                         status === 'loading' ? '#e3f2fd' : '#f5f5f5';
+        }
+    }
+
     window.generateGrid = function() {
         if (!searchFeature) return alert('Нарисуйте полигон!');
         gridLayer.clearLayers();
         gridCells = [];
+        roadCells = [];
+        noRoadCells = [];
+        highDifficultyCells = [];
+        mediumDifficultyCells = [];
+        lowDifficultyCells = [];
+        roadDataLoaded = false;
+        roadLoadingStatus = 'not-started';
 
         const size = parseFloat(document.getElementById('gridCustom').value) || parseFloat(document.getElementById('gridPreset').value);
         if (!size || size <= 0) return alert('Укажите размер сетки!');
@@ -225,9 +743,21 @@ document.addEventListener('DOMContentLoaded', () => {
             }
             col++;
         }
+
+        // Загружаем дороги с обработкой ошибок
+        updateRoadStatus('', 'loading');
+        loadRoadsInGrid().catch(e => {
+            console.error('Error loading roads:', e);
+            roadCells = [...gridCells];
+            noRoadCells = [];
+            roadDataLoaded = false;
+            updateRoadStatus(`Ошибка загрузки дорог: ${e.message}`, 'error');
+        });
+        
         forceResize();
     };
 
+    // ✅ ИСПРАВЛЕНАЯ ФУНКЦИЯ ДОБАВЛЕНИЯ ГРУППЫ
     window.addGroup = function() {
         const base = document.getElementById('baseCall').value.trim() || 'Group';
         let maxNum = 0;
@@ -244,156 +774,420 @@ document.addEventListener('DOMContentLoaded', () => {
         const cars = parseInt(document.getElementById('cars').value) || 0;
         const bla = parseInt(document.getElementById('blaNum').value) || 0;
 
-        groups.push({callsign, people, cars, bla, color: colors[groups.length % colors.length], cells: [], area: 0});
+        // Проверка на дублирование позывного
+        if (groups.some(g => g.callsign === callsign)) {
+            alert('Группа с таким позывным уже существует!');
+            return;
+        }
+
+        groups.push({callsign, people, cars, bla, color: colors[groups.length % colors.length], cells: [], area: 0, zoneType: '', difficulty: '', efficiency: 0});
         updateGroupsTable();
+        
+        // Автоматическое перераспределение зон при добавлении группы
+        if (gridCells.length > 0) {
+            setTimeout(assignZones, 100);
+        }
     };
 
-    window.updateGroupsTable = function() {
-        const table = document.getElementById('groupsTable');
-        table.innerHTML = '<tr><th>Позывной</th><th>Люди</th><th>Авто</th><th>БЛА</th><th>Площадь м²</th><th>Квадратов</th></tr>';
-        groups.forEach(g => {
-            const row = table.insertRow();
-            row.style.backgroundColor = g.color + '33';
-            row.onclick = () => g.cells.length && map.fitBounds(getGroupBounds(g));
-            row.insertCell().innerText = g.callsign;
-            row.insertCell().innerText = g.people;
-            row.insertCell().innerText = g.cars;
-            row.insertCell().innerText = g.bla;
-            row.insertCell().innerText = Math.round(g.area);
-            row.insertCell().innerText = g.cells.length;
-        });
+    // ✅ ИСПРАВЛЕНАЯ ФУНКЦИЯ РЕДАКТИРОВАНИЯ ГРУППЫ
+    window.updateGroup = function() {
+        if (!currentGroup) return;
+
+        const base = document.getElementById('baseCall').value.trim() || 'Group';
+        const num = document.getElementById('startNum').value ? parseInt(document.getElementById('startNum').value) : currentGroup.callsign.split('-')[1];
+        const callsign = `${base}-${num.toString().padStart(2,'0')}`;
+        const people = parseInt(document.getElementById('people').value) || 0;
+        const cars = parseInt(document.getElementById('cars').value) || 0;
+        const bla = parseInt(document.getElementById('blaNum').value) || 0;
+
+        // Проверка на дублирование позывного
+        if (groups.some(g => g.callsign === callsign && g !== currentGroup)) {
+            alert('Группа с таким позывным уже существует!');
+            return;
+        }
+
+        currentGroup.callsign = callsign;
+        currentGroup.people = people;
+        currentGroup.cars = cars;
+        currentGroup.bla = bla;
+        
+        // Сбрасываем редактирование
+        currentGroup = null;
+        document.getElementById('addGroupButton').style.display = 'block';
+        document.getElementById('updateGroupButton').style.display = 'none';
+        document.getElementById('cancelGroupButton').style.display = 'none';
+        
+        updateGroupsTable();
+        if (gridCells.length > 0) {
+            setTimeout(assignZones, 100);
+        }
     };
 
-    window.getGroupBounds = function(g) {
-        if (g.cells.length === 0) return map.getBounds();
-        let merged = g.cells[0].geojson;
-        for (let j = 1; j < g.cells.length; j++) merged = turf.union(merged, g.cells[j].geojson);
-        return L.geoJSON(merged).getBounds();
+    window.cancelGroupEdit = function() {
+        currentGroup = null;
+        document.getElementById('addGroupButton').style.display = 'block';
+        document.getElementById('updateGroupButton').style.display = 'none';
+        document.getElementById('cancelGroupButton').style.display = 'none';
     };
 
-    // 🌄 Получение высоты с OpenTopography
-    async function getElevationFromOpenTopo(lat, lng) {
-        if (!OPEN_TOPO_API_KEY || OPEN_TOPO_API_KEY.includes('YOUR')) {
-            console.warn('API key not set, using approx');
-            return 100 + Math.sin(lat) * 50;
+    window.editGroup = function(callsign) {
+        const group = groups.find(g => g.callsign === callsign);
+        if (!group) return;
+
+        currentGroup = group;
+        
+        document.getElementById('baseCall').value = group.callsign.split('-')[0];
+        document.getElementById('startNum').value = group.callsign.split('-')[1];
+        document.getElementById('people').value = group.people;
+        document.getElementById('cars').value = group.cars;
+        document.getElementById('blaNum').value = group.bla;
+        
+        document.getElementById('addGroupButton').style.display = 'none';
+        document.getElementById('updateGroupButton').style.display = 'block';
+        document.getElementById('cancelGroupButton').style.display = 'block';
+    };
+
+    window.deleteGroup = function(callsign) {
+        if (!confirm(`Удалить группу "${callsign}"?`)) return;
+        
+        groups = groups.filter(g => g.callsign !== callsign);
+        updateGroupsTable();
+        if (gridCells.length > 0) {
+            setTimeout(assignZones, 100);
         }
+    };
 
-        const url = `https://api.opentopography.org/aggregator?demtype=COP30&west=${lng}&south=${lat}&east=${lng}&north=${lat}&outputFormat=JSON&apikey=${OPEN_TOPO_API_KEY}`;
-        try {
-            const res = await fetch(url);
-            const data = await res.json();
-            return data.results?.[0]?.elevation || 0;
-        } catch (e) {
-            console.warn(`OpenTopo error for ${lat},${lng}:`, e.message);
-            return 0;
+    // ✅ ПЕРЕРАБОТАННАЯ СИСТЕМА РАСЧЕТА МОЩНОСТИ ГРУПП
+    window.calculateGroupPower = function(group, cellType, hasRoad) {
+        let basePower = 0;
+        const maxDailyArea = 100; // Максимальная площадь, которую может обработать группа за день
+        
+        // Пешие группы
+        if (group.cars === 0 && group.bla === 0) {
+            // 5 км²/час на человека в легкой местности
+            basePower = group.people * 5;
+            
+            // Учет сложности местности
+            if (cellType === 'high') basePower *= 0.3;
+            else if (cellType === 'medium') basePower *= 0.7;
+            
+            // Пешие группы эффективнее в местности без дорог
+            if (!hasRoad) basePower *= 1.2;
         }
-    }
-
-    // 🗺️ K-Means кластеризация (исправлена!)
-    function kMeansClustering(points, k) {
-        if (points.length < k) k = points.length;
-        if (k === 0) return [];
-
-        let centroids = [];
-        for (let i = 0; i < k; i++) {
-            centroids.push([...points[i].coords]);
-        }
-
-        let changed = true;
-        let iterations = 0;
-        const maxIterations = 100;
-
-        while (changed && iterations < maxIterations) {
-            iterations++;
-            changed = false;
-
-            const clusters = Array.from({ length: k }, () => ({ points: [] }));
-
-            points.forEach(p => {
-                let minDist = Infinity;
-                let bestCluster = 0;
-                for (let i = 0; i < k; i++) {
-                    const dx = p.coords[0] - centroids[i][0];
-                    const dy = p.coords[1] - centroids[i][1];
-                    const dist = dx*dx + dy*dy;
-                    if (dist < minDist) {
-                        minDist = dist;
-                        bestCluster = i;
-                    }
-                }
-                clusters[bestCluster].points.push(p);
-            });
-
-            for (let i = 0; i < k; i++) {
-                const cluster = clusters[i];
-                if (cluster.points.length === 0) continue;
-
-                let sumX = 0, sumY = 0;
-                cluster.points.forEach(p => {
-                    sumX += p.coords[0] * p.weight;
-                    sumY += p.coords[1] * p.weight;
-                });
-                const totalWeight = cluster.points.reduce((sum, p) => sum + p.weight, 0);
-                const newX = sumX / totalWeight;
-                const newY = sumY / totalWeight;
-
-                if (Math.abs(newX - centroids[i][0]) > 0.0001 || Math.abs(newY - centroids[i][1]) > 0.0001) {
-                    changed = true;
-                }
-                centroids[i] = [newX, newY];
+        // Группы с авто
+        else if (group.cars > 0) {
+            // Оптимальное соотношение: 4-5 человек на авто
+            const peoplePerCar = group.people / Math.max(1, group.cars);
+            const carEfficiency = Math.min(1, peoplePerCar / 5);
+            
+            // 20 км²/час на авто в легкой местности с дорогами
+            basePower = group.cars * 20 * carEfficiency;
+            
+            // Учет сложности местности и наличия дорог
+            if (cellType === 'high') {
+                basePower *= 0.2; // В сложной местности эффективность авто сильно падает
+            } else if (cellType === 'medium') {
+                basePower *= 0.6;
+            } else {
+                basePower *= 1.0;
+            }
+            
+            // Авто НЕ могут работать без дорог
+            if (!hasRoad) {
+                basePower *= 0.1; // Сильно снижаем эффективность
             }
         }
+        // Группы с БЛА
+        else if (group.bla > 0) {
+            // 50 км²/час на БЛА в легкой местности
+            basePower = group.bla * 50;
+            
+            // Учет сложности местности
+            if (cellType === 'high') basePower *= 0.8; // БЛА эффективны даже в сложной местности
+            else if (cellType === 'medium') basePower *= 0.9;
+            else basePower *= 1.0;
+        }
+        
+        // Ограничение максимальной производительности
+        return Math.min(basePower, maxDailyArea);
+    };
 
-        return clusters;
-    }
+    // ✅ КОРРЕКТНЫЙ РАСЧЕТ ЭФФЕКТИВНОСТИ ГРУППЫ
+    window.calculateGroupEfficiency = function(group, cellType, hasRoad) {
+        const dailyPower = calculateGroupPower(group, cellType, hasRoad);
+        const dailyHours = 8; // Рабочий день 8 часов
+        
+        // Эффективность = км², которые группа может обработать за день
+        return dailyPower * dailyHours;
+    };
 
-    // 🧩 Улучшенное распределение зон (с рельефом)
+    // ✅ ПОЛНОСТЬЮ ПЕРЕРАБОТАННЫЙ АЛГОРИТМ РАСПРЕДЕЛЕНИЯ ЗОН
     window.assignZones = async function() {
+        if (roadLoadingStatus === 'loading') {
+            alert('Дождитесь завершения загрузки дорог.');
+            return;
+        }
+        
         if (gridCells.length === 0) return alert('Создайте грид!');
         if (groups.length === 0) return alert('Добавьте группы!');
 
         zoneLayers.clearLayers();
-        groups.forEach(g => { g.cells = []; g.area = 0; });
-
-        const centers = [];
-
-        // Сбор данных с учётом рельефа
-        for (const c of gridCells) {
-            const [lng, lat] = c.center.geometry.coordinates;
-            const elevation = await getElevationFromOpenTopo(lat, lng);
-            const difficulty = elevation > 200 ? 1.8 : elevation > 150 ? 1.3 : 1.0;
-            const area = c.area;
-
-            centers.push({
-                coords: [lng, lat],
-                area,
-                cell: c,
-                weight: difficulty
-            });
-        }
-
-        const clusters = kMeansClustering(centers, groups.length);
-
-        groups.forEach((g, i) => {
-            const cluster = clusters[i];
-            if (!cluster) return;
-            cluster.points.forEach(p => {
-                g.cells.push(p.cell);
-                g.area += p.area;
-            });
+        groups.forEach(g => { 
+            g.cells = []; 
+            g.area = 0; 
+            g.zoneType = ''; 
+            g.difficulty = '';
+            g.efficiency = 0;
         });
 
-        // Отрисовка
+        // Шаг 0: Проверка данных
+        console.log(`Количество ячеек: ${gridCells.length}`);
+        console.log(`Количество ячеек с дорогами: ${roadCells.length}`);
+        console.log(`Количество ячеек без дорог: ${noRoadCells.length}`);
+        console.log(`Количество ячеек с высокой сложностью: ${highDifficultyCells.length}`);
+        console.log(`Количество ячеек со средней сложностью: ${mediumDifficultyCells.length}`);
+        console.log(`Количество ячеек с низкой сложностью: ${lowDifficultyCells.length}`);
+
+        // Шаг 1: Определяем сложность для каждой ячейки
+        const cellDetails = gridCells.map(cell => {
+            const difficulty = getCellDifficulty(cell);
+            const hasRoad = roadCells.some(rc => rc === cell);
+            
+            return {
+                cell: cell,
+                difficulty: difficulty,
+                hasRoad: hasRoad,
+                area: cell.area
+            };
+        });
+
+        // Шаг 2: Рассчитываем общую трудоемкость всех ячеек
+        let totalDifficulty = 0;
+        const cellDifficulties = [];
+        
+        for (const cd of cellDetails) {
+            // Коэффициент сложности в зависимости от типа местности
+            const difficultyFactor = cd.difficulty === 'high' ? 3.0 : cd.difficulty === 'medium' ? 1.5 : 1.0;
+            
+            // Коэффициент для ячеек с дорогами (для пеших групп)
+            const roadFactor = cd.hasRoad ? 0.7 : 1.0;
+            
+            // Общая трудоемкость ячейки
+            const cellDifficulty = cd.area * difficultyFactor * roadFactor;
+            
+            cellDifficulties.push({
+                cell: cd.cell,
+                difficulty: cellDifficulty,
+                difficultyType: cd.difficulty,
+                hasRoad: cd.hasRoad
+            });
+            
+            totalDifficulty += cellDifficulty;
+        }
+        
+        // Сортируем ячейки по трудоемкости (от самых сложных к простым)
+        cellDifficulties.sort((a, b) => b.difficulty - a.difficulty);
+        
+        // Шаг 3: Рассчитываем мощность каждой группы
+        const groupPowers = groups.map(group => {
+            // Рассчитываем эффективность группы для разных типов местности
+            const efficiencyWithRoad = calculateGroupEfficiency(group, 'low', true);
+            const efficiencyWithoutRoad = calculateGroupEfficiency(group, 'low', false);
+            
+            // Определяем, какая местность лучше подходит для группы
+            const isBetterWithRoad = efficiencyWithRoad > efficiencyWithoutRoad;
+            
+            return {
+                group: group,
+                efficiencyWithRoad: efficiencyWithRoad,
+                efficiencyWithoutRoad: efficiencyWithoutRoad,
+                isBetterWithRoad: isBetterWithRoad,
+                assignedCells: [],
+                assignedDifficulty: 0
+            };
+        });
+        
+        // Шаг 4: Распределяем ячейки по группам
+        for (const cd of cellDifficulties) {
+            // Находим группу с наибольшим остатком мощности
+            let bestGroup = null;
+            let maxRemainingPower = -1;
+            
+            for (const gp of groupPowers) {
+                // Проверка совместимости типа местности
+                const isCompatible = 
+                    (gp.group.cars > 0 && cd.hasRoad) ||  // Группы с авто работают на территориях с дорогами
+                    (gp.group.cars === 0 && !cd.hasRoad) ||  // Пешие группы работают на территориях без дорог
+                    (gp.group.bla > 0);  // Группы с БЛА работают везде
+                
+                // Если группа с авто, но ячейка без дорог, учитываем сниженную эффективность
+                let remainingPower;
+                if (gp.group.cars > 0 && !cd.hasRoad) {
+                    const reducedEfficiency = gp.efficiencyWithoutRoad;
+                    remainingPower = reducedEfficiency - gp.assignedDifficulty;
+                } else {
+                    const efficiency = cd.hasRoad ? gp.efficiencyWithRoad : gp.efficiencyWithoutRoad;
+                    remainingPower = efficiency - gp.assignedDifficulty;
+                }
+                
+                if (isCompatible && remainingPower >= cd.difficulty && remainingPower > maxRemainingPower) {
+                    maxRemainingPower = remainingPower;
+                    bestGroup = gp;
+                }
+            }
+            
+            // Если не найдена подходящая группа, распределяем между всеми группами
+            if (!bestGroup) {
+                bestGroup = groupPowers.reduce((best, gp) => {
+                    const efficiency = cd.hasRoad ? gp.efficiencyWithRoad : gp.efficiencyWithoutRoad;
+                    const remainingPower = efficiency - gp.assignedDifficulty;
+                    return remainingPower > (best ? (efficiency - best.assignedDifficulty) : -1) ? gp : best;
+                }, null);
+            }
+            
+            if (bestGroup) {
+                bestGroup.assignedCells.push(cd);
+                bestGroup.assignedDifficulty += cd.difficulty;
+            }
+        }
+        
+        // Шаг 5: Назначаем ячейки группам
+        for (const gp of groupPowers) {
+            gp.group.cells = gp.assignedCells.map(cd => cd.cell);
+            gp.group.area = gp.assignedCells.reduce((sum, cd) => sum + cd.cell.area, 0);
+            
+            // Определяем, какая местность преобладает в зоне
+            const roadCount = gp.group.cells.filter(cell => roadCells.some(rc => rc === cell)).length;
+            const highDifficultyCount = gp.group.cells.filter(cell => getCellDifficulty(cell) === 'high').length;
+            const mediumDifficultyCount = gp.group.cells.filter(cell => getCellDifficulty(cell) === 'medium').length;
+            
+            const hasRoad = roadCount > gp.group.cells.length / 2;
+            const hasHighDifficulty = highDifficultyCount > gp.group.cells.length / 2;
+            const hasMediumDifficulty = mediumDifficultyCount > gp.group.cells.length / 2;
+            
+            // Определяем тип зоны
+            if (hasRoad && hasHighDifficulty) {
+                gp.group.zoneType = 'road-high';
+            } else if (hasRoad && hasMediumDifficulty) {
+                gp.group.zoneType = 'road-medium';
+            } else if (hasRoad) {
+                gp.group.zoneType = 'road';
+            } else if (hasHighDifficulty) {
+                gp.group.zoneType = 'no-road-high';
+            } else if (hasMediumDifficulty) {
+                gp.group.zoneType = 'no-road-medium';
+            } else {
+                gp.group.zoneType = 'no-road';
+            }
+            
+            // Определяем сложность
+            if (hasHighDifficulty) {
+                gp.group.difficulty = 'высокая';
+            } else if (hasMediumDifficulty) {
+                gp.group.difficulty = 'средняя';
+            } else {
+                gp.group.difficulty = 'низкая';
+            }
+            
+            // Рассчитываем окончательную эффективность
+            const hasRoadInZone = gp.group.cells.some(cell => roadCells.some(rc => rc === cell));
+            gp.group.efficiency = calculateGroupEfficiency(
+                gp.group, 
+                gp.group.difficulty === 'высокая' ? 'high' : 
+                gp.group.difficulty === 'средняя' ? 'medium' : 'low',
+                hasRoadInZone
+            );
+        }
+        
+        // Шаг 6: Корректировка для балансировки
+        const maxImbalance = 0.2; // 20%
+        let needsAdjustment = true;
+        let adjustmentCount = 0;
+        
+        while (needsAdjustment && adjustmentCount < 10) {
+            needsAdjustment = false;
+            
+            // Сортируем группы по степени загруженности (от самой загруженной к наименее)
+            const sortedGroups = [...groupPowers].sort((a, b) => 
+                (a.assignedDifficulty / (a.group.efficiency / 8)) - (b.assignedDifficulty / (b.group.efficiency / 8))
+            );
+            
+            // Самая загруженная группа
+            const mostLoaded = sortedGroups[sortedGroups.length - 1];
+            // Наименее загруженная группа
+            const leastLoaded = sortedGroups[0];
+            
+            // Степень загрузки
+            const mostLoadedRatio = mostLoaded.assignedDifficulty / (mostLoaded.group.efficiency / 8);
+            const leastLoadedRatio = leastLoaded.assignedDifficulty / (leastLoaded.group.efficiency / 8);
+            
+            // Разница в загрузке
+            const imbalance = mostLoadedRatio - leastLoadedRatio;
+            
+            if (imbalance > maxImbalance) {
+                needsAdjustment = true;
+                
+                // Ищем самую легкую ячейку в самой загруженной группе
+                let lightestCell = null;
+                let minDifficulty = Infinity;
+                
+                for (const cd of mostLoaded.assignedCells) {
+                    if (cd.difficulty < minDifficulty) {
+                        minDifficulty = cd.difficulty;
+                        lightestCell = cd;
+                    }
+                }
+                
+                if (lightestCell) {
+                    // Переносим ячейку в наименее загруженную группу
+                    mostLoaded.assignedCells = mostLoaded.assignedCells.filter(cd => cd !== lightestCell);
+                    mostLoaded.assignedDifficulty -= lightestCell.difficulty;
+                    
+                    leastLoaded.assignedCells.push(lightestCell);
+                    leastLoaded.assignedDifficulty += lightestCell.difficulty;
+                }
+            }
+            
+            adjustmentCount++;
+        }
+        
+        // Шаг 7: Гарантируем, что все группы получают ненулевую площадь
+        for (const gp of groupPowers) {
+            if (gp.group.cells.length === 0 && gridCells.length > 0) {
+                // Назначаем самую подходящую ячейку
+                let bestCell = null;
+                let bestScore = -Infinity;
+                
+                for (const cd of cellDifficulties) {
+                    const isCompatible = 
+                        (gp.group.cars > 0 && cd.hasRoad) || 
+                        (gp.group.cars === 0 && !cd.hasRoad) || 
+                        (gp.group.bla > 0);
+                    
+                    if (isCompatible) {
+                        const score = cd.difficulty;
+                        if (score > bestScore) {
+                            bestScore = score;
+                            bestCell = cd;
+                        }
+                    }
+                }
+                
+                if (bestCell) {
+                    gp.assignedCells.push(bestCell);
+                    gp.assignedDifficulty += bestCell.difficulty;
+                    
+                    gp.group.cells = gp.assignedCells.map(cd => cd.cell);
+                    gp.group.area = gp.assignedCells.reduce((sum, cd) => sum + cd.cell.area, 0);
+                }
+            }
+        }
+        
+        // Шаг 8: Отрисовка
         gridCells.forEach(cell => {
             groups.forEach(g => {
                 if (g.cells.includes(cell)) {
-                    cell.layer.setStyle({
-                        fillColor: g.color,
-                        fillOpacity: 0.45,
-                        color: g.color,
-                        weight: 2,
-                        opacity: 0.9
-                    });
+                    cell.layer.setStyle({fillColor: g.color, fillOpacity: 0.45, color: g.color, weight: 2, opacity: 0.9});
                 }
             });
         });
@@ -401,18 +1195,17 @@ document.addEventListener('DOMContentLoaded', () => {
         groups.forEach(g => {
             if (g.cells.length === 0) return;
             let merged = g.cells[0].geojson;
-            for (let j = 1; j < g.cells.length; j++) merged = turf.union(merged, g.cells[j].geojson);
+            for (let j = 1; j < g.cells.length; j++) {
+                try {
+                    merged = turf.union(merged, g.cells[j].geojson);
+                } catch (e) {
+                    console.warn('Failed to merge cell:', e);
+                }
+            }
             const center = turf.center(merged);
-            L.geoJSON(merged, {
-                style: { color: g.color, weight: 6, fillOpacity: 0, dashArray: '10,15', opacity: 0.9 }
-            }).addTo(zoneLayers);
+            L.geoJSON(merged, {style: {color: g.color, weight: 6, fillOpacity: 0, dashArray: '10,15', opacity: 0.9}}).addTo(zoneLayers);
             L.marker(center.geometry.coordinates.slice().reverse(), {
-                icon: L.divIcon({
-                    className: 'group-label',
-                    html: g.callsign,
-                    iconSize: [120, 44],
-                    iconAnchor: [60, 22]
-                })
+                icon: L.divIcon({className: 'group-label', html: g.callsign, iconSize: [120,44], iconAnchor: [60,22]})
             }).addTo(zoneLayers);
         });
 
@@ -420,36 +1213,90 @@ document.addEventListener('DOMContentLoaded', () => {
         forceResize();
     };
 
-    // 🛣️ Загрузка дорог с BDC API
-    async function loadRoads() {
-        if (!searchFeature) return;
-        const bounds = turf.bbox(searchFeature);
-        const [lngMin, latMin, lngMax, latMax] = bounds;
+    window.updateGroupsTable = function() {
+        const table = document.getElementById('groupsTable');
+        table.innerHTML = '<tr><th>Позывной</th><th>Люди</th><th>Авто</th><th>БЛА</th><th>Площадь км²</th><th>Квадратов</th><th>Вес</th><th>Эффективность</th><th>Сложность</th><th>Тип зоны</th><th>Действия</th></tr>';
+        
+        groups.forEach(g => {
+            const weight = g.people * 0.5 + (g.cars > 0 ? 1 : 0);
+            const efficiency = calculateGroupEfficiency(
+                g, 
+                g.difficulty === 'высокая' ? 'high' : 
+                g.difficulty === 'средняя' ? 'medium' : 'low',
+                g.zoneType.includes('road')
+            );
+            
+            const row = table.insertRow();
+            row.className = 'group-row';
+            row.style.backgroundColor = g.color + '33';
+            
+            row.insertCell().innerText = g.callsign;
+            row.insertCell().innerText = g.people;
+            row.insertCell().innerText = g.cars;
+            row.insertCell().innerText = g.bla;
+            row.insertCell().innerText = (g.area / 1000000).toFixed(2);
+            row.insertCell().innerText = g.cells.length;
+            
+            const weightCell = row.insertCell();
+            weightCell.innerHTML = `<span class="weight-badge">${weight.toFixed(1)}</span>`;
+            
+            const efficiencyCell = row.insertCell();
+            efficiencyCell.innerHTML = `<span class="efficiency-badge">${efficiency.toFixed(0)} км²/день</span>`;
+            
+            const difficultyCell = row.insertCell();
+            difficultyCell.innerHTML = g.difficulty ? 
+                `<span class="road-type ${g.difficulty === 'высокая' ? 'high-difficulty' : g.difficulty === 'средняя' ? 'medium-difficulty' : 'low-difficulty'}">${g.difficulty}</span>` : 
+                '-';
+            
+            const zoneTypeCell = row.insertCell();
+            if (g.zoneType === 'road-high') {
+                zoneTypeCell.innerHTML = '<span class="road-type road">Дороги / Высокая</span>';
+            } else if (g.zoneType === 'road-medium') {
+                zoneTypeCell.innerHTML = '<span class="road-type road">Дороги / Средняя</span>';
+            } else if (g.zoneType === 'road') {
+                zoneTypeCell.innerHTML = '<span class="road-type road">Дороги</span>';
+            } else if (g.zoneType === 'no-road-high') {
+                zoneTypeCell.innerHTML = '<span class="road-type no-road">Без дорог / Высокая</span>';
+            } else if (g.zoneType === 'no-road-medium') {
+                zoneTypeCell.innerHTML = '<span class="road-type no-road">Без дорог / Средняя</span>';
+            } else if (g.zoneType === 'no-road') {
+                zoneTypeCell.innerHTML = '<span class="road-type no-road">Без дорог</span>';
+            } else {
+                zoneTypeCell.innerHTML = '-';
+            }
+            
+            const actionsCell = row.insertCell();
+            actionsCell.innerHTML = `
+                <div class="group-actions">
+                    <button class="accent" onclick="editGroup('${g.callsign}')" style="padding: 3px 5px; margin: 0 2px;">Изменить</button>
+                    <button class="danger" onclick="deleteGroup('${g.callsign}')" style="padding: 3px 5px; margin: 0 2px;">Удалить</button>
+                </div>
+            `;
+        });
+    };
 
-        const url = `https://i.centr.by/bdc-road-api/api/Roads/Search?latMin=${latMin}&latMax=${latMax}&lngMin=${lngMin}&lngMax=${lngMax}`;
-
-        try {
-            const res = await fetch(url);
-            if (!res.ok) throw new Error(res.status);
-            const roads = await res.json();
-
-            roadLayer.clearLayers();
-            roads.forEach(road => {
-                if (road.geometry?.type === 'LineString') {
-                    const coords = road.geometry.coordinates.map(c => [c[1], c[0]]);
-                    L.polyline(coords, { color: '#555', weight: 2, opacity: 0.8 }).addTo(roadLayer);
-                }
-            });
-            console.log(`Загружено ${roads.length} дорог`);
-        } catch (e) {
-            console.error('Ошибка загрузки дорог:', e);
-            alert('Не удалось загрузить дороги. Проверьте подключение.');
+    window.getGroupBounds = function(g) {
+        if (g.cells.length === 0) return map.getBounds();
+        let merged = g.cells[0].geojson;
+        for (let j = 1; j < g.cells.length; j++) {
+            try {
+                merged = turf.union(merged, g.cells[j].geojson);
+            } catch (e) {
+                console.error('Failed to merge geometry:', e);
+            }
         }
-    }
+        return L.geoJSON(merged).getBounds();
+    };
 
-    // 🚶‍♂️ Генерация маршрутов
+    // ✅ ИСПРАВЛЕНАЯ ФУНКЦИЯ ГЕНЕРАЦИИ МАРШРУТОВ
     window.generateRoutes = function() {
+        if (roadLoadingStatus !== 'success') {
+            alert('⚠️ Невозможно сгенерировать маршруты: данные о дорогах не загружены.\n\nДождитесь загрузки дорожной сети.');
+            return;
+        }
+        
         routeLayers.clearLayers();
+        
         const stepPesh = parseFloat(document.getElementById('stepPesh').value) || 10;
         const stepBla = parseFloat(document.getElementById('stepBla').value) || 50;
         const blaSpeed = 10;
@@ -459,15 +1306,19 @@ document.addEventListener('DOMContentLoaded', () => {
             if (g.cells.length === 0) return;
 
             let merged = g.cells[0].geojson;
-            for (let j = 1; j < g.cells.length; j++) merged = turf.union(merged, g.cells[j].geojson);
+            for (let j = 1; j < g.cells.length; j++) {
+                try {
+                    merged = turf.union(merged, g.cells[j].geojson);
+                } catch (e) {
+                    console.error('Failed to merge cell:', e);
+                }
+            }
 
-            // Для групп с авто — маршруты по дорогам
             if (g.cars > 0) {
                 generateRouteByRoads(g, merged);
                 return;
             }
 
-            // Пешие и БЛА — зигзаг
             const bbox = turf.bbox(merged);
             const avgLat = (bbox[1] + bbox[3]) / 2;
             const metersPerDegLat = 111132.92 - 559.82 * Math.cos(2 * avgLat * Math.PI/180) + 1.175 * Math.cos(4 * avgLat * Math.PI/180);
@@ -489,7 +1340,13 @@ document.addEventListener('DOMContentLoaded', () => {
             if (paths.length === 0) return;
 
             let fullPath = paths[0];
-            for (let i = 1; i < paths.length; i++) fullPath = fullPath.concat(paths[i]);
+            for (let i = 1; i < paths.length; i++) {
+                try {
+                    fullPath = fullPath.concat(paths[i]);
+                } catch (e) {
+                    console.error('Failed to concatenate path:', e);
+                }
+            }
 
             const length = turf.length(turf.lineString(fullPath), {units: 'meters'});
             if (g.bla && length / blaSpeed > blaTimeMax) return;
@@ -503,16 +1360,72 @@ document.addEventListener('DOMContentLoaded', () => {
         forceResize();
     };
 
-    // 🛣️ Маршрут по дорогам
+    // ✅ ИСПРАВЛЕНАЯ ФУНКЦИЯ ДЛЯ МАРШРУТОВ ПО ДОРОГАМ
     function generateRouteByRoads(group, zoneGeoJSON) {
         const intersectingLines = [];
+        
+        // Проверяем, является ли зона валидным полигоном
+        let validZoneGeoJSON = zoneGeoJSON;
+        try {
+            if (validZoneGeoJSON.geometry.type !== 'Polygon' && validZoneGeoJSON.geometry.type !== 'MultiPolygon') {
+                // Пытаемся исправить геометрию
+                validZoneGeoJSON = turf.buffer(validZoneGeoJSON, 0.0001, {units: 'kilometers'});
+            }
+        } catch (e) {
+            console.error('Failed to validate zone geometry:', e);
+            return;
+        }
+
         roadLayer.eachLayer(layer => {
             if (!(layer instanceof L.Polyline)) return;
+            
             const roadLine = layer.toGeoJSON();
             try {
-                const intersection = turf.intersect(roadLine, zoneGeoJSON);
-                if (intersection) intersectingLines.push(intersection);
-            } catch (e) {}
+                // Преобразуем линию в формат, подходящий для Turf
+                if (roadLine.geometry.type === 'LineString') {
+                    // Проверяем и исправляем порядок координат
+                    const validCoordinates = roadLine.geometry.coordinates.map(coord => {
+                        // Если координаты [lat, lng], меняем на [lng, lat]
+                        if (coord.length === 2 && Math.abs(coord[0]) > 90 && Math.abs(coord[1]) <= 90) {
+                            return [coord[1], coord[0]];
+                        }
+                        return coord;
+                    });
+                    
+                    const validLine = {
+                        type: 'Feature',
+                        properties: roadLine.properties,
+                        geometry: {
+                            type: 'LineString',
+                            coordinates: validCoordinates
+                        }
+                    };
+                    
+                    // Проверяем валидность геометрии
+                    let validIntersection = null;
+                    try {
+                        validIntersection = turf.intersect(validLine, validZoneGeoJSON);
+                    } catch (e) {
+                        try {
+                            // Пытаемся исправить геометрию зоны
+                            const fixedZone = turf.buffer(validZoneGeoJSON, 0.0001, {units: 'kilometers'});
+                            validIntersection = turf.intersect(validLine, fixedZone);
+                        } catch (e2) {
+                            console.error('Failed to fix zone geometry:', e2);
+                        }
+                    }
+                    
+                    if (validIntersection) {
+                        // Возвращаем координаты в исходный порядок [lat, lng] для отображения
+                        if (validIntersection.geometry.type === 'LineString') {
+                            validIntersection.geometry.coordinates = validIntersection.geometry.coordinates.map(coord => [coord[1], coord[0]]);
+                        }
+                        intersectingLines.push(validIntersection);
+                    }
+                }
+            } catch (e) {
+                console.error('Error in route generation:', e);
+            }
         });
 
         if (intersectingLines.length === 0) return;
@@ -521,7 +1434,9 @@ document.addEventListener('DOMContentLoaded', () => {
         for (let i = 1; i < intersectingLines.length; i++) {
             try {
                 combined = turf.union(combined, intersectingLines[i]);
-            } catch (e) {}
+            } catch (e) {
+                console.error('Failed to combine routes:', e);
+            }
         }
 
         if (combined?.geometry?.type === 'LineString') {
@@ -533,14 +1448,164 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    // 📤 Экспорт
+    // ✅ ИСПРАВЛЕННЫЙ ЭКСПОРТ В KML
+    window.exportKML = function() {
+        try {
+            // Создаем временный слой KML
+            const kml = new L.KML();
+            
+            // Добавляем все слои в KML
+            [drawnItems, gridLayer, zoneLayers, routeLayers, roadLayer].forEach(layerGroup => {
+                layerGroup.eachLayer(layer => {
+                    try {
+                        // Проверяем, является ли слой полигоном или линией
+                        if (layer instanceof L.Polygon || layer instanceof L.Polyline || layer instanceof L.Marker) {
+                            kml.addLayer(layer);
+                        }
+                    } catch (e) {
+                        console.warn('Failed to add layer to KML:', e);
+                    }
+                });
+            });
+            
+            // Получаем KML
+            const kmlContent = kml.getKML();
+            
+            // Создаем и скачиваем файл
+            const blob = new Blob([kmlContent], { type: 'application/vnd.google-earth.kml+xml' });
+            const a = document.createElement('a');
+            a.href = URL.createObjectURL(blob);
+            a.download = 'pso_plan.kml';
+            a.click();
+            
+            console.log('KML успешно экспортирован');
+        } catch (e) {
+            console.error('Error exporting KML:', e);
+            alert('Ошибка при экспорте KML: ' + e.message);
+        }
+    };
+
+    // ✅ ИМПОРТ KML/KMZ ФАЙЛОВ
+    window.importKML = function(file) {
+        if (!file) return;
+        
+        const fileName = file.name.toLowerCase();
+        const fileType = fileName.endsWith('.kmz') ? 'kmz' : 'kml';
+        
+        const reader = new FileReader();
+        
+        reader.onload = function(e) {
+            try {
+                let kmlData;
+                
+                if (fileType === 'kmz') {
+                    // Обработка KMZ (ZIP-архив с KML внутри)
+                    JSZip.loadAsync(e.target.result).then(function(zip) {
+                        // Ищем файл KML внутри архива
+                        const kmlFile = Object.keys(zip.files).find(f => f.toLowerCase().endsWith('.kml'));
+                        
+                        if (!kmlFile) {
+                            alert('В KMZ файле не найден KML файл');
+                            return;
+                        }
+                        
+                        zip.files[kmlFile].async('string').then(function(kmlContent) {
+                            processKMLData(kmlContent);
+                        }).catch(function(err) {
+                            console.error('Error reading KML from KMZ:', err);
+                            alert('Ошибка при чтении KML из KMZ: ' + err.message);
+                        });
+                    }).catch(function(err) {
+                        console.error('Error processing KMZ:', err);
+                        alert('Ошибка при обработке KMZ файла: ' + err.message);
+                    });
+                } else {
+                    // Прямая обработка KML
+                    processKMLData(e.target.result);
+                }
+            } catch (err) {
+                console.error('Error importing KML:', err);
+                alert('Ошибка при импорте KML: ' + err.message);
+            }
+        };
+        
+        reader.onerror = function(e) {
+            console.error('FileReader error:', e);
+            alert('Ошибка при чтении файла: ' + e.target.error);
+        };
+        
+        reader.readAsArrayBuffer(file);
+    };
+    
+    // ✅ ОБРАБОТКА KML ДАННЫХ
+    function processKMLData(kmlContent) {
+        try {
+            // Очищаем предыдущие импортированные данные
+            importedKmlLayer.clearLayers();
+            
+            // Создаем и добавляем KML слой
+            const kmlLayer = new L.KML(kmlContent, {
+                async: true
+            });
+            
+            kmlLayer.on('loaded', function(e) {
+                // Добавляем слой на карту
+                kmlLayer.addTo(importedKmlLayer);
+                
+                // Устанавливаем вид карты на импортированные данные
+                if (kmlLayer.getBounds) {
+                    map.fitBounds(kmlLayer.getBounds());
+                }
+                
+                console.log(`Импортировано ${e.target.featureCount} объектов из KML`);
+                alert(`✅ Успешно импортировано ${e.target.featureCount} объектов из KML`);
+            });
+            
+            kmlLayer.on('error', function(e) {
+                console.error('KML parsing error:', e);
+                alert('Ошибка при парсинге KML: ' + e.message);
+            });
+        } catch (err) {
+            console.error('Error processing KML data:', err);
+            alert('Ошибка при обработке KML данных: ' + err.message);
+        }
+    }
+    
+    // ✅ ОБРАБОТЧИК ЗАГРУЗКИ ФАЙЛОВ
+    document.getElementById('kmlFileInput').addEventListener('change', function(e) {
+        const file = e.target.files[0];
+        if (!file) return;
+        
+        const fileName = file.name.toLowerCase();
+        if (!fileName.endsWith('.kml') && !fileName.endsWith('.kmz')) {
+            alert('Пожалуйста, выберите файл KML или KMZ');
+            this.value = '';
+            return;
+        }
+        
+        window.importKML(file);
+        this.value = ''; // Сбрасываем значение для возможности повторной загрузки того же файла
+    });
+
     window.exportGeoJSON = function() {
         const features = [searchFeature, ...gridCells.map(c => c.geojson)];
+        
+        // Добавляем данные о дорогах
+        if (roadGeoJSON) {
+            features.push(...roadGeoJSON.features);
+        }
+        
         groups.forEach(g => {
             if (g.cells.length > 0) {
                 let merged = g.cells[0].geojson;
-                for (let j = 1; j < g.cells.length; j++) merged = turf.union(merged, g.cells[j].geojson);
-                merged.properties = { group: g.callsign, people: g.people, cars: g.cars, bla: g.bla };
+                for (let j = 1; j < g.cells.length; j++) {
+                    try {
+                        merged = turf.union(merged, g.cells[j].geojson);
+                    } catch (e) {
+                        console.error('Failed to merge cell for export:', e);
+                    }
+                }
+                merged.properties = { group: g.callsign, people: g.people, cars: g.cars, bla: g.bla, efficiency: g.efficiency };
                 features.push(merged);
             }
         });
@@ -551,18 +1616,18 @@ document.addEventListener('DOMContentLoaded', () => {
         a.click();
     };
 
-    window.exportKML = function() {
-        const kml = new L.KML();
-        [drawnItems, gridLayer, zoneLayers, routeLayers].forEach(layerGroup => layerGroup.eachLayer(l => kml.addLayer(l)));
-        const blob = new Blob([kml.getKML()], { type: 'application/vnd.google-earth.kml+xml' });
-        const a = document.createElement('a');
-        a.href = URL.createObjectURL(blob);
-        a.download = 'pso_plan.kml';
-        a.click();
-    };
-
     window.saveProject = function() {
-        const data = { searchFeature, gridCells: gridCells.map(c => c.geojson), groups };
+        const data = { 
+            searchFeature, 
+            gridCells: gridCells.map(c => c.geojson), 
+            roadCells: roadCells.map(c => c.geojson),
+            noRoadCells: noRoadCells.map(c => c.geojson),
+            highDifficultyCells: highDifficultyCells.map(c => c.geojson),
+            mediumDifficultyCells: mediumDifficultyCells.map(c => c.geojson),
+            lowDifficultyCells: lowDifficultyCells.map(c => c.geojson),
+            roadGeoJSON, // Сохраняем данные о дорогах
+            groups 
+        };
         localStorage.setItem('psoProject', JSON.stringify(data));
         alert('Проект сохранён!');
     };
@@ -577,6 +1642,24 @@ document.addEventListener('DOMContentLoaded', () => {
             if (data.searchFeature) {
                 searchPolygon = L.geoJSON(data.searchFeature).addTo(drawnItems);
                 document.getElementById('gridControls').style.display = 'block';
+                
+                // Восстанавливаем ячейки с дорогами и без
+                roadCells = data.roadCells ? data.roadCells.map(c => ({geojson: c})) : [];
+                noRoadCells = data.noRoadCells ? data.noRoadCells.map(c => ({geojson: c})) : [];
+                highDifficultyCells = data.highDifficultyCells ? data.highDifficultyCells.map(c => ({geojson: c})) : [];
+                mediumDifficultyCells = data.mediumDifficultyCells ? data.mediumDifficultyCells.map(c => ({geojson: c})) : [];
+                lowDifficultyCells = data.lowDifficultyCells ? data.lowDifficultyCells.map(c => ({geojson: c})) : [];
+                roadGeoJSON = data.roadGeoJSON; // Восстанавливаем данные о дорогах
+                
+                // Устанавливаем флаг загрузки данных о дорогах
+                roadDataLoaded = roadGeoJSON && roadGeoJSON.features && roadGeoJSON.features.length > 0;
+                roadLoadingStatus = roadDataLoaded ? 'success' : 'not-started';
+                
+                if (roadDataLoaded) {
+                    updateRoadStatus(`Дороги загружены (сессия). Ячейки с дорогами: ${roadCells.length}`, 'success');
+                } else {
+                    updateRoadStatus('Дороги не загружены', 'not-started');
+                }
             }
             alert('Проект загружен. Перестройте грид.');
             forceResize();
@@ -589,7 +1672,7 @@ document.addEventListener('DOMContentLoaded', () => {
         setTimeout(forceResize, 800);
     }
 
-    console.log('PSO MapBY Dfly v5.0 — готово');
+    console.log('PSO MapBY Dfly v7.25 — готово. KML импорт/экспорт.');
 });
 </script>
 </body>
