@@ -2,7 +2,7 @@
 <html lang="ru">
 <head>
     <meta charset="utf-8">
-    <title>PSO MapBY Dfly v7.27 — ИСПРАВЛЕНО РАСПРЕДЕЛЕНИЕ И KML ЭКСПОРТ</title>
+    <title>PSO MapBY Dfly v7.30 — ИСПРАВЛЕНО РАСПРЕДЕЛЕНИЕ ДЛЯ КОМБИНИРОВАННЫХ ГРУПП</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <link rel="stylesheet" href="https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.css" />
@@ -43,12 +43,13 @@
         .group-stats { font-size: 11px; color: #666; margin-top: 5px; }
         .error-message { color: #f44336; font-weight: bold; }
         .kml-fix { background: #e0e0e0; padding: 10px; border-radius: 5px; margin: 10px 0; }
+        .distribution-stats { background: #f0f0f0; padding: 8px; border-radius: 5px; margin: 10px 0; }
     </style>
 </head>
 <body>
 <div id="map"></div>
 <div id="sidebar">
-    <h2>PSO Координатор v7.27</h2>
+    <h2>PSO Координатор v7.30</h2>
 
     <button onclick="startDrawing()" class="primary">🎨 Нарисовать полигон поиска</button>
 
@@ -89,6 +90,10 @@
         <button onclick="cancelGroupEdit()" class="danger" id="cancelGroupButton" style="display:none;">Отмена</button>
     </div>
     <button onclick="assignZones()" class="danger">Распределить зоны</button>
+    <div class="distribution-stats">
+        <strong>Статистика распределения:</strong>
+        <div id="distributionStats"></div>
+    </div>
     <table id="groupsTable"><tr><th>Позывной</th><th>Люди</th><th>Авто</th><th>БЛА</th><th>Площадь км²</th><th>Квадратов</th><th>Вес</th><th>Эффективность</th><th>Сложность</th><th>Тип зоны</th><th>Действия</th></tr></table>
     <hr>
     <h4>Маршруты</h4>
@@ -126,7 +131,7 @@ function getRoadDensity(cell) {
     if (!roadGeoJSON || !roadGeoJSON.features) return 0;
     
     let totalLength = 0;
-    const cellArea = turf.area(cell.geojson) / 1000000;
+    const cellArea = turf.area(cell.geojson) / 1000000; // в км²
     
     for (const feature of roadGeoJSON.features) {
         try {
@@ -139,6 +144,7 @@ function getRoadDensity(cell) {
         }
     }
     
+    // Плотность дорог в км/км²
     return cellArea > 0 ? totalLength / cellArea : 0;
 }
 
@@ -146,9 +152,13 @@ function getCellDifficulty(cell) {
     const [lng, lat] = cell.center.geometry.coordinates;
     const elev = estimateElevation(lat, lng);
     
+    // Вычисляем уклон
     const slope = (elev - RELIEF.min) / (RELIEF.max - RELIEF.min) * 90;
+    
+    // Вычисляем плотность дорог
     const roadDensity = getRoadDensity(cell);
     
+    // Определяем сложность с учетом обоих факторов
     if (slope > 30 || roadDensity < 0.5) {
         return 'high';
     } else if (slope > 15 || roadDensity < 1.5) {
@@ -1006,15 +1016,21 @@ document.addEventListener('DOMContentLoaded', () => {
                 efficiencyWithoutRoad: efficiencyWithoutRoad,
                 isBetterWithRoad: isBetterWithRoad,
                 assignedCells: [],
-                assignedDifficulty: 0
+                assignedDifficulty: 0,
+                targetDifficulty: 0 // Целевая трудоемкость для группы
             };
         });
         
-        // Шаг 4: Распределяем ячейки по группам
+        // Шаг 4: Определяем целевую трудоемкость для каждой группы
+        const totalGroupPower = groupPowers.reduce((sum, gp) => sum + gp.efficiencyWithRoad, 0);
+        groupPowers.forEach(gp => {
+            gp.targetDifficulty = (gp.efficiencyWithRoad / totalGroupPower) * totalDifficulty;
+        });
+        
+        // Шаг 5: Распределяем ячейки по группам
         for (const cd of cellDifficulties) {
-            // Находим группу с наибольшим остатком мощности
             let bestGroup = null;
-            let maxRemainingPower = -1;
+            let minDiff = Infinity; // Разница между текущей и целевой трудоемкостью
             
             for (const gp of groupPowers) {
                 // Проверка совместимости типа местности
@@ -1033,8 +1049,8 @@ document.addEventListener('DOMContentLoaded', () => {
                     remainingPower = efficiency - gp.assignedDifficulty;
                 }
                 
-                if (isCompatible && remainingPower >= cd.difficulty && remainingPower > maxRemainingPower) {
-                    maxRemainingPower = remainingPower;
+                if (isCompatible && remainingPower >= cd.difficulty && remainingPower > minDiff) {
+                    minDiff = remainingPower;
                     bestGroup = gp;
                 }
             }
@@ -1054,7 +1070,7 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         }
         
-        // Шаг 5: Назначаем ячейки группам
+        // Шаг 6: Назначаем ячейки группам
         for (const gp of groupPowers) {
             gp.group.cells = gp.assignedCells.map(cd => cd.cell);
             gp.group.area = gp.assignedCells.reduce((sum, cd) => sum + cd.cell.area, 0);
@@ -1102,58 +1118,6 @@ document.addEventListener('DOMContentLoaded', () => {
             );
         }
         
-        // Шаг 6: Корректировка для балансировки
-        const maxImbalance = 0.2; // 20%
-        let needsAdjustment = true;
-        let adjustmentCount = 0;
-        
-        while (needsAdjustment && adjustmentCount < 10) {
-            needsAdjustment = false;
-            
-            // Сортируем группы по степени загруженности (от самой загруженной к наименее)
-            const sortedGroups = [...groupPowers].sort((a, b) => 
-                (a.assignedDifficulty / (a.group.efficiency / 8)) - (b.assignedDifficulty / (b.group.efficiency / 8))
-            );
-            
-            // Самая загруженная группа
-            const mostLoaded = sortedGroups[sortedGroups.length - 1];
-            // Наименее загруженная группа
-            const leastLoaded = sortedGroups[0];
-            
-            // Степень загрузки
-            const mostLoadedRatio = mostLoaded.assignedDifficulty / (mostLoaded.group.efficiency / 8);
-            const leastLoadedRatio = leastLoaded.assignedDifficulty / (leastLoaded.group.efficiency / 8);
-            
-            // Разница в загрузке
-            const imbalance = mostLoadedRatio - leastLoadedRatio;
-            
-            if (imbalance > maxImbalance) {
-                needsAdjustment = true;
-                
-                // Ищем самую легкую ячейку в самой загруженной группе
-                let lightestCell = null;
-                let minDifficulty = Infinity;
-                
-                for (const cd of mostLoaded.assignedCells) {
-                    if (cd.difficulty < minDifficulty) {
-                        minDifficulty = cd.difficulty;
-                        lightestCell = cd;
-                    }
-                }
-                
-                if (lightestCell) {
-                    // Переносим ячейку в наименее загруженную группу
-                    mostLoaded.assignedCells = mostLoaded.assignedCells.filter(cd => cd !== lightestCell);
-                    mostLoaded.assignedDifficulty -= lightestCell.difficulty;
-                    
-                    leastLoaded.assignedCells.push(lightestCell);
-                    leastLoaded.assignedDifficulty += lightestCell.difficulty;
-                }
-            }
-            
-            adjustmentCount++;
-        }
-        
         // Шаг 7: Гарантируем, что все группы получают ненулевую площадь
         for (const gp of groupPowers) {
             if (gp.group.cells.length === 0 && gridCells.length > 0) {
@@ -1186,7 +1150,31 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         }
         
-        // Шаг 8: Отрисовка
+        // Шаг 8: Корректировка для групп с БЛА и комбинированных групп
+        for (const gp of groupPowers) {
+            if (gp.group.bla > 0 && gp.group.cells.length === 0) {
+                // Группы с БЛА должны получать зону даже если не подходят по другим критериям
+                let bestCell = null;
+                let maxArea = -Infinity;
+                
+                for (const cd of cellDifficulties) {
+                    if (cd.cell.area > maxArea) {
+                        maxArea = cd.cell.area;
+                        bestCell = cd;
+                    }
+                }
+                
+                if (bestCell) {
+                    gp.assignedCells.push(bestCell);
+                    gp.assignedDifficulty += bestCell.difficulty;
+                    
+                    gp.group.cells = gp.assignedCells.map(cd => cd.cell);
+                    gp.group.area = gp.assignedCells.reduce((sum, cd) => sum + cd.cell.area, 0);
+                }
+            }
+        }
+        
+        // Шаг 9: Отрисовка
         gridCells.forEach(cell => {
             groups.forEach(g => {
                 if (g.cells.includes(cell)) {
@@ -1213,6 +1201,7 @@ document.addEventListener('DOMContentLoaded', () => {
         });
 
         updateGroupsTable();
+        updateDistributionStats();
         forceResize();
     };
 
@@ -1248,7 +1237,7 @@ document.addEventListener('DOMContentLoaded', () => {
             weightCell.innerHTML = `<span class="weight-badge">${weight.toFixed(1)}</span>`;
             
             const efficiencyCell = row.insertCell();
-            efficiencyCell.innerHTML = `<span class="efficiency-badge">${efficiency.toFixed(0)} км²/день</span>`;
+            efficiencyCell.innerHTML = `<span class="efficiency-badge">${efficiency > 0 ? efficiency.toFixed(0) : '0'} км²/день</span>`;
             
             const difficultyCell = row.insertCell();
             difficultyCell.innerHTML = g.difficulty ? 
@@ -1281,29 +1270,51 @@ document.addEventListener('DOMContentLoaded', () => {
             `;
         });
         
-        // Добавляем информацию о распределении
-        const statsRow = table.insertRow();
-        statsRow.style.backgroundColor = '#f0f0f0';
-        statsRow.style.fontWeight = 'bold';
-        statsRow.style.fontSize = '12px';
-        
-        const statsCell = statsRow.insertCell();
-        statsCell.colSpan = 11;
-        statsCell.textContent = `Распределено: ${groups.reduce((sum, g) => sum + g.cells.length, 0)} квадратов на ${groups.length} групп`;
-        
         // Добавляем информацию о нераспределенных ячейках
-        const remainingCells = gridCells.length - groups.reduce((sum, g) => sum + g.cells.length, 0);
-        if (remainingCells > 0) {
-            const remainingRow = table.insertRow();
-            remainingRow.style.backgroundColor = '#ffebee';
-            remainingRow.style.fontWeight = 'bold';
-            remainingRow.style.fontSize = '12px';
-            
-            const remainingCell = remainingRow.insertCell();
-            remainingCell.colSpan = 11;
-            remainingCell.textContent = `⚠️ Осталось нераспределенных ячеек: ${remainingCells}`;
+        if (gridCells.length > 0) {
+            const remainingCells = gridCells.length - groups.reduce((sum, g) => sum + g.cells.length, 0);
+            if (remainingCells > 0) {
+                const remainingRow = table.insertRow();
+                remainingRow.style.backgroundColor = '#ffebee';
+                remainingRow.style.fontWeight = 'bold';
+                
+                const remainingCell = remainingRow.insertCell();
+                remainingCell.colSpan = 11;
+                remainingCell.innerHTML = `<span class="warning">⚠️ Осталось нераспределенных ячеек: ${remainingCells}</span>`;
+            }
         }
     };
+
+    // ✅ НОВАЯ ФУНКЦИЯ ДЛЯ ОТРАЖЕНИЯ СТАТИСТИКИ РАСПРЕДЕЛЕНИЯ
+    function updateDistributionStats() {
+        const statsDiv = document.getElementById('distributionStats');
+        if (!statsDiv) return;
+        
+        let totalArea = 0;
+        let totalCells = 0;
+        let assignedCells = 0;
+        
+        groups.forEach(g => {
+            totalArea += g.area;
+            totalCells += g.cells.length;
+            assignedCells += g.cells.length;
+        });
+        
+        const remainingCells = gridCells.length - assignedCells;
+        
+        let statsHTML = `
+            <div>Всего ячеек: ${gridCells.length}</div>
+            <div>Распределено ячеек: ${assignedCells} (${Math.round(assignedCells / gridCells.length * 100)}%)</div>
+        `;
+        
+        if (remainingCells > 0) {
+            statsHTML += `<div class="warning">Осталось нераспределенных ячеек: ${remainingCells}</div>`;
+        }
+        
+        statsHTML += `<div>Общая площадь: ${(totalArea / 1000000).toFixed(2)} км²</div>`;
+        
+        statsDiv.innerHTML = statsHTML;
+    }
 
     window.getGroupBounds = function(g) {
         if (g.cells.length === 0) return map.getBounds();
@@ -1708,7 +1719,7 @@ document.addEventListener('DOMContentLoaded', () => {
         setTimeout(forceResize, 800);
     }
 
-    console.log('PSO MapBY Dfly v7.27 — готово. Исправлены ошибки распределения и KML экспорта.');
+    console.log('PSO MapBY Dfly v7.30 — готово. Исправлено распределение для комбинированных групп.');
 });
 </script>
 </body>
