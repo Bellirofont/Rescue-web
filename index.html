@@ -2,7 +2,7 @@
 <html lang="ru">
 <head>
     <meta charset="utf-8">
-    <title>PSO MapBY Dfly v7.25 — KML ИМПОРТ/ЭКСПОРТ</title>
+    <title>PSO MapBY Dfly v7.26 — КОРРЕКТНОЕ РАСПРЕДЕЛЕНИЕ ЗОН</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <link rel="stylesheet" href="https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.css" />
@@ -40,12 +40,13 @@
         .retry-button { background: #2196F3; color: white; padding: 3px 5px; border-radius: 3px; margin-left: 5px; cursor: pointer; }
         .info-badge { background: #2196F3; color: white; padding: 2px 5px; border-radius: 3px; font-size: 12px; }
         .file-upload { display: none; }
+        .group-stats { font-size: 11px; color: #666; margin-top: 5px; }
     </style>
 </head>
 <body>
 <div id="map"></div>
 <div id="sidebar">
-    <h2>PSO Координатор v7.25</h2>
+    <h2>PSO Координатор v7.26</h2>
 
     <button onclick="startDrawing()" class="primary">🎨 Нарисовать полигон поиска</button>
 
@@ -279,7 +280,7 @@ document.addEventListener('DOMContentLoaded', () => {
     let zoneLayers = L.layerGroup().addTo(map);
     let routeLayers = L.layerGroup().addTo(map);
     let roadLayer = L.layerGroup().addTo(map);
-    let importedKmlLayer = L.layerGroup().addTo(map); // Слой для импортированных KML
+    let importedKmlLayer = L.layerGroup().addTo(map);
     let gridCells = [];
     let groups = [];
     const colors = ['#e41a1c','#377eb8','#4daf4a','#984ea3','#ff7f00','#ffff33','#a65628','#f781bf','#999999','#66c2a5'];
@@ -1207,6 +1208,20 @@ document.addEventListener('DOMContentLoaded', () => {
             L.marker(center.geometry.coordinates.slice().reverse(), {
                 icon: L.divIcon({className: 'group-label', html: g.callsign, iconSize: [120,44], iconAnchor: [60,22]})
             }).addTo(zoneLayers);
+            
+            // Обновляем данные в таблице
+            const row = document.querySelector(`#groupsTable tr[data-callsign="${g.callsign}"]`);
+            if (row) {
+                const areaCell = row.querySelector('.area-cell');
+                const squareCell = row.querySelector('.square-cell');
+                const weightCell = row.querySelector('.weight-cell');
+                const efficiencyCell = row.querySelector('.efficiency-cell');
+                
+                if (areaCell) areaCell.textContent = (g.area / 1000000).toFixed(2);
+                if (squareCell) squareCell.textContent = g.cells.length;
+                if (weightCell) weightCell.innerHTML = `<span class="weight-badge">${(g.people * 0.5 + (g.cars > 0 ? 1 : 0)).toFixed(1)}</span>`;
+                if (efficiencyCell) efficiencyCell.innerHTML = `<span class="efficiency-badge">${g.efficiency.toFixed(0)} км²/день</span>`;
+            }
         });
 
         updateGroupsTable();
@@ -1229,18 +1244,27 @@ document.addEventListener('DOMContentLoaded', () => {
             const row = table.insertRow();
             row.className = 'group-row';
             row.style.backgroundColor = g.color + '33';
+            row.setAttribute('data-callsign', g.callsign);
             
             row.insertCell().innerText = g.callsign;
             row.insertCell().innerText = g.people;
             row.insertCell().innerText = g.cars;
             row.insertCell().innerText = g.bla;
-            row.insertCell().innerText = (g.area / 1000000).toFixed(2);
-            row.insertCell().innerText = g.cells.length;
+            
+            const areaCell = row.insertCell();
+            areaCell.className = 'area-cell';
+            areaCell.innerText = (g.area / 1000000).toFixed(2);
+            
+            const squareCell = row.insertCell();
+            squareCell.className = 'square-cell';
+            squareCell.innerText = g.cells.length;
             
             const weightCell = row.insertCell();
+            weightCell.className = 'weight-cell';
             weightCell.innerHTML = `<span class="weight-badge">${weight.toFixed(1)}</span>`;
             
             const efficiencyCell = row.insertCell();
+            efficiencyCell.className = 'efficiency-cell';
             efficiencyCell.innerHTML = `<span class="efficiency-badge">${efficiency.toFixed(0)} км²/день</span>`;
             
             const difficultyCell = row.insertCell();
@@ -1273,6 +1297,16 @@ document.addEventListener('DOMContentLoaded', () => {
                 </div>
             `;
         });
+        
+        // Добавляем информацию о распределении
+        const statsRow = table.insertRow();
+        statsRow.style.backgroundColor = '#f0f0f0';
+        statsRow.style.fontWeight = 'bold';
+        statsRow.style.fontSize = '12px';
+        
+        const statsCell = statsRow.insertCell();
+        statsCell.colSpan = 11;
+        statsCell.textContent = `Распределено: ${groups.reduce((sum, g) => sum + g.cells.length, 0)} квадратов на ${groups.length} групп`;
     };
 
     window.getGroupBounds = function(g) {
@@ -1672,7 +1706,7 @@ document.addEventListener('DOMContentLoaded', () => {
         setTimeout(forceResize, 800);
     }
 
-    console.log('PSO MapBY Dfly v7.25 — готово. KML импорт/экспорт.');
+    console.log('PSO MapBY Dfly v7.26 — готово. Корректное распределение зон.');
 });
 </script>
 </body>
