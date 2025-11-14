@@ -1,0 +1,227 @@
+html, body { 
+    height: 100%; 
+    margin: 0; 
+    padding: 0; 
+    font-family: Arial, sans-serif; 
+    overflow: hidden; 
+    background: #fff; 
+}
+#map { 
+    position: absolute; 
+    top: 0; 
+    bottom: 0; 
+    left: 0; 
+    right: 0; 
+    width: 100vw; 
+    height: 100vh; 
+    background: #dddddd; 
+    z-index: 1; 
+}
+#sidebar { 
+    position: absolute; 
+    top: 10px; 
+    left: 10px; 
+    width: 340px; 
+    max-height: 90vh; 
+    overflow-y: auto; 
+    background: rgba(255,255,255,0.95); 
+    padding: 15px; 
+    border-radius: 12px; 
+    box-shadow: 0 0 15px rgba(0,0,0,0.5); 
+    z-index: 1000; 
+    font-size: 14px; 
+}
+
+button, input, select { 
+    margin: 5px 0; 
+    padding: 10px; 
+    width: 100%; 
+    border-radius: 8px; 
+    box-sizing: border-box; 
+    border: 1px solid #ccc; 
+    font-size: 14px; 
+}
+button { 
+    cursor: pointer; 
+    font-weight: bold; 
+}
+.primary { 
+    background:#4CAF50; 
+    color:white; 
+}
+.accent { 
+    background:#FF9800; 
+    color:white; 
+}
+.danger { 
+    background:#f44336; 
+    color:white; 
+}
+.upload { 
+    background:#2196F3; 
+    color:white; 
+}
+table { 
+    width: 100%; 
+    border-collapse: collapse; 
+    margin-top: 10px; 
+    font-size: 13px; 
+}
+th, td { 
+    border: 1px solid #999; 
+    padding: 8px; 
+    text-align: center; 
+}
+th { 
+    background: #f0f0f0; 
+}
+.grid-label { 
+    background: transparent; 
+    border: none; 
+    color: #000; 
+    font-weight: bold; 
+    font-size: 12px; 
+    text-shadow: 1px 1px 3px white; 
+}
+.group-label { 
+    background: rgba(255,255,255,0.9); 
+    padding: 4px 10px; 
+    border-radius: 6px; 
+    font-weight: bold; 
+    box-shadow: 0 0 8px rgba(0,0,0,0.3); 
+}
+tr { 
+    cursor: pointer; 
+    transition: background 0.2s; 
+}
+tr:hover { 
+    filter: brightness(0.95); 
+}
+.group-row { 
+    position: relative; 
+}
+.group-actions { 
+    display: none; 
+    position: absolute; 
+    right: 5px; 
+    top: 5px; 
+}
+.group-row:hover .group-actions { 
+    display: block; 
+}
+.weight-badge { 
+    display: inline-block; 
+    padding: 2px 5px; 
+    border-radius: 3px; 
+    font-size: 12px; 
+    margin-left: 5px; 
+    background: #e91e63; 
+    color: white; 
+}
+.road-type { 
+    display: inline-block; 
+    padding: 2px 5px; 
+    border-radius: 3px; 
+    font-size: 12px; 
+    margin-left: 5px; 
+}
+.road { 
+    background: #4CAF50; 
+    color: white; 
+}
+.no-road { 
+    background: #f44336; 
+    color: white; 
+}
+.high-difficulty { 
+    background: #FF5722; 
+    color: white; 
+}
+.medium-difficulty { 
+    background: #FF9800; 
+    color: white; 
+}
+.low-difficulty { 
+    background: #4CAF50; 
+    color: white; 
+}
+.warning { 
+    color: #f44336; 
+    font-weight: bold; 
+}
+.debug-info { 
+    font-size: 11px; 
+    color: #666; 
+    margin-top: 2px; 
+}
+.efficiency-badge { 
+    display: inline-block; 
+    padding: 2px 5px; 
+    border-radius: 3px; 
+    font-size: 12px; 
+    margin-left: 5px; 
+    background: #3F51B5; 
+    color: white; 
+}
+.retry-button { 
+    background: #2196F3; 
+    color: white; 
+    padding: 3px 5px; 
+    border-radius: 3px; 
+    margin-left: 5px; 
+    cursor: pointer; 
+}
+.info-badge { 
+    background: #2196F3; 
+    color: white; 
+    padding: 2px 5px; 
+    border-radius: 3px; 
+    font-size: 12px; 
+}
+.file-upload { 
+    display: none; 
+}
+.group-stats { 
+    font-size: 11px; 
+    color: #666; 
+    margin-top: 5px; 
+}
+.error-message { 
+    color: #f44336; 
+    font-weight: bold; 
+}
+.kml-fix { 
+    background: #e0e0e0; 
+    padding: 10px; 
+    border-radius: 5px; 
+    margin: 10px 0; 
+}
+.distribution-stats { 
+    background: #f0f0f0; 
+    padding: 8px; 
+    border-radius: 5px; 
+    margin: 10px 0; 
+}
+.road-category { 
+    display: inline-block; 
+    padding: 2px 5px; 
+    border-radius: 3px; 
+    font-size: 12px; 
+    margin-left: 5px; 
+}
+.paved { 
+    background: #4CAF50; 
+    color: white; 
+}
+.unpaved { 
+    background: #FF9800; 
+    color: white; 
+}
+.footpath { 
+    background: #9C27B0; 
+    color: white; 
+}
+.path { 
+    background: #795548; 
+    color: white; 
+}
